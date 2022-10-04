@@ -39,8 +39,8 @@ subroutine advance
      ! (3) source terms
 
      call advance_vertical_all
-     call add_sources 
-     if (.not. Is1D) call advance_horizontal_all
+     !call add_sources 
+     !if (.not. Is1D) call advance_horizontal_all
 
   else
      dt = DtStatisticalModels

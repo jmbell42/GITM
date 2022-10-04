@@ -96,6 +96,8 @@ subroutine write_restart(dir)
      if(UseTopography)then
         write(iRestartUnit_) Altitude_GB(:,:,:,iBlock)
      else
+        ! JMB: Warning for Temporary Array was noticed here
+        !  This may or may not impact performance going forward
         write(iRestartUnit_) Altitude_GB(1,1,:,iBlock)
      end if
 
