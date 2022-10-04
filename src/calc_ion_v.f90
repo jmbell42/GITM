@@ -188,10 +188,10 @@ subroutine calc_ion_v(iBlock)
              VIParallel*BLocal(:,:,:,iDir)/&
              B0(:,:,:,iMag_,iBlock)
 
-        IVelocityPar(:, :, iAlt+1, iDir, iBlock) = &
-             IVelocityPar(:, :, iAlt, iDir, iBlock)
-        IVelocityPar(:, :, iAlt+2, iDir, iBlock) = &
-             IVelocityPar(:, :, iAlt, iDir, iBlock)
+        IVelocityPar(:, :, nAlts+1, iDir, iBlock) = &
+             IVelocityPar(:, :, nAlts, iDir, iBlock)
+        IVelocityPar(:, :, nAlts+2, iDir, iBlock) = &
+             IVelocityPar(:, :, nAlts, iDir, iBlock)
         
         IVelocityPerp(:,:,:,iDir, iBlock) = &
              ( RhoNu * ForcePerp(:,:,:,iDir) &
