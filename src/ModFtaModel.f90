@@ -79,14 +79,31 @@ contains
     ElectronAverageEnergy = 0.1
 
     do iLon = -1, nLons+2
+       !write(*,*) 'iLon = ', iLon
        do iLat = -1, nLats+2
+          !write(*,*) 'iLat = ', iLat
 
           iMlt = mod(floor(mod(MLT(iLon, iLat, nAlts+1)+24.0,24.0)*4),nMltsFta)
+          !write(*,*) 'MLT, iMLT =', MLT(iLon,iLat,nAlts+1), iMlt
           if (iMlt == 0) iMlt = nMltsFta
 
           gMlat = abs(MLatitude(iLon, iLat, nAlts+1, iBlock))
+          !write(*,*) 'gMlat, minLat =', gMlat, minLat
+           
           if (gMlat > minLat) then
-             iMlat = (gMlat - minLat) / dLat
+             ! JMB Note: 10/2022: 
+             ! Out Of Bounds Error can occur if GITM Latitude is between 
+             ! minlat -> minlat + dLat/2 (right next to the cutoff lat)
+             ! or maxlats + dLat/2 (right near the pole)
+             ! Current Fix: if iMLat le 1, then iMlat = 1
+             ! This will address the edgecases
+             !iMlat = (gMlat - minLat) / dLat + 1
+             iMlat = max(1, min(nLatsFta, floor((gMlat - minLat)/dLat + 1)))
+             !if(iMlat .lt. 1) then
+             !   iMlat = 1 
+             !elseif(iMlat .gt. nLatsFta) then
+             !   iMlat = nLatsFta 
+             !endif
              ElectronEnergyFlux(iLon, iLat) = eFlux(iMlt, iMlat)
              ElectronAverageEnergy(iLon, iLat) = AveE(iMlt, iMlat)
           endif
@@ -282,6 +299,10 @@ contains
   ! -----------------------------------------------------------------
 
   subroutine initialize_fta
+    ! JMB: Quick Check
+    !use ModGITM, only : iProc
+    ! JMB: Quick Check
+    integer :: iLat
 
     double precision, dimension(nMltsFta, nParams) :: &
          k_k, k_b, b_k, b_b, k_k2, k_b2, tmp2
@@ -316,6 +337,14 @@ contains
     enddo
 
     lats_fixed_grid = (/(i, i = 0, nLatsFta - 1, 1)/) * dLat + minLat + dLat/2.0
+
+    ! JMB: Quick Check
+    !if(iProc .eq. 0) then
+  !integer, parameter :: nLatsFta = 80
+    !  do iLat = 1, nLatsFta
+    !     write(*,*) 'iLat, lats_fixed_grid = ', iLat, lats_fixed_grid(iLat)
+    !  enddo !iLat = 1, nFtaLats
+    !endif!(iProc .eq. 0) then
     
   end subroutine initialize_fta
   
