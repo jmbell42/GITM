@@ -480,7 +480,7 @@ subroutine calc_scaled_euv
   integer, parameter :: WoodsAndRottman_20Jun89     = 4
 
   integer :: N, NN, iMin(1)=0,iError
-  real    :: f107_Ratio, r1, r2, hlybr, fexvir, hlya, heiew
+  real    :: f107_ratio, r1, r2, hlybr, fexvir, hlya, heiew
   real    :: xuvfac, hlymod, heimod, xuvf, wavelength_ave
   real (Real8_) :: rtime
   integer, dimension(7) :: Time_Array
@@ -505,6 +505,7 @@ subroutine calc_scaled_euv
   ! 'best fit' regression coefficients, commented out, for reference:
   !     DATA B1/1.31, 0.01106, 0.00492/, B2/-6.618, 0.66159, 0.38319/
 
+  f107_ratio = 0.0
   iError = 0
   call get_f107(CurrentTime, f107, iError)
   if (iError /= 0) then
@@ -619,7 +620,7 @@ subroutine calc_scaled_euv
         ! 2A - 1750A, so it is used to fill in the Above and Below spectrum
         f107_ratio = (f107-68.0) / (243.0-68.0)
         do N = 1, Num_WaveLengths_High
-           Solar_Flux(N) = RFLUX(N) + (XFLUX(N)-RFLUX(N)) * f107_Ratio
+           Solar_Flux(N) = RFLUX(N) + (XFLUX(N)-RFLUX(N)) * f107_ratio
         enddo
 
         ! This is a total hack, just comparing FISM to these fluxes:
