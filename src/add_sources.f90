@@ -1,6 +1,8 @@
 ! Copyright 2021, the GITM Development Team (see srcDoc/dev_team.md for members)
 ! Full license can be found in LICENSE
-
+!
+! Update1: Hello From Discover:
+! Update2: Discover Sucks! Use Pleiades
 subroutine add_sources
 
   use ModGITM
