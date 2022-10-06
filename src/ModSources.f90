@@ -137,7 +137,7 @@ module ModSources
   real, dimension(40,11) :: qIR_NLTE_table
   real, dimension(19,16) :: diurnalHeating, semiDiurnalHeating  
 
-  real :: HorizontalTempSource(nLons, nLats, nAlts)
+!  real :: HorizontalTempSource(nLons, nLats, nAlts)
 
   real :: Diffusion(nLons, nLats, nAlts, nSpecies)
   real :: NeutralFriction(nLons, nLats, nAlts, nSpecies)
