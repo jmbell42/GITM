@@ -26,7 +26,7 @@ subroutine advance_horizontal_all
 
      if (.not. IsFullSphere) call set_horizontal_bcs(iBlock)
 
-!     call advance_horizontal(iBlock)
+     call advance_horizontal(iBlock)
 
   end do
 
