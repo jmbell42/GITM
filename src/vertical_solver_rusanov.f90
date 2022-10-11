@@ -397,7 +397,6 @@ subroutine advance_vertical_1stage( &
   use ModVertical, only : &
        EddyCoef_1D, Centrifugal, Coriolis, &
        MeanMajorMass_1d, Gamma_1d, InvRadialDistance_C, &
-       KappaTemp_1d, &
        Gravity_G, Altitude_G,Cv_1D, dAlt_F
   use ModTime
   use ModInputs
