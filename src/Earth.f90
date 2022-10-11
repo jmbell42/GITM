@@ -164,36 +164,7 @@ subroutine calc_planet_sources(iBlock)
 
   if (UseNOCooling) then
 
-     !  [NO] cooling 
-     ! [Reference: Kockarts,G., G.R.L.,VOL.7, PP.137-140,Feberary 1980 ]
- 
-     Omega = 3.6e-17 * NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock) /      &
-          (3.6e-17 * NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock) + 13.3)
-
-     ! We need to check this out. I don't like the first / sign....
-
-     NOCooling = Planck_Constant * Speed_Light / &
-          5.3e-6 * &
-          Omega * 13.3 *  &
-          exp(- Planck_Constant * Speed_Light / &
-          (5.3e-6 * Boltzmanns_Constant * &
-          Temperature(1:nLons,1:nLats,1:nAlts,iBlock)* &
-          TempUnit(1:nLons,1:nLats,1:nAlts))) * &
-          NDensityS(1:nLons,1:nLats,1:nAlts,iNO_,iBlock)
-
-     NOCooling2d = 0.0
-     do iAlt=1,nAlts
-        RadiativeCooling2d(1:nLons, 1:nLats) = &
-             RadiativeCooling2d(1:nLons, 1:nLats) + &
-             NOCooling(1:nLons,1:nLats,iAlt) * &
-             dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
-        NOCooling2d = NOCooling2d + &
-             NOCooling(1:nLons,1:nLats,iAlt) * &
-             dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
-     enddo
-
-     NOCooling = NOCooling / TempUnit(1:nLons,1:nLats,1:nAlts) / &
-          (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
+     call calc_no_cooling(iBlock)
 
   else
 
@@ -673,3 +644,96 @@ subroutine calc_o3p_cooling(iBlock)
        (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
 
 endsubroutine calc_o3p_cooling
+
+subroutine calc_no_cooling(iBlock)
+
+  use ModSources
+  use ModEUV
+  use ModGITM
+  use ModTime
+  
+  implicit none
+
+  integer, intent(in) :: iBlock
+
+  integer :: iAlt, iError, iDir, iLat, iLon
+
+  real :: tmp2(nLons, nLats, nAlts)
+  real :: tmp3(nLons, nLats, nAlts)
+  real :: Omega(nLons, nLats, nAlts)
+  ! Updated 2022 by Jared Bell (JMB):
+  ! Added more readily understood variables here
+  real :: NO_collisional_excitation(nLons, nLats, nAlts)
+  real :: NO_collisional_deexcitation(nLons, nLats, nAlts)
+  real :: NO_spontaneous_emission(nLons,nLats,nAlts)
+  real :: Earthshine_NO_excitation(nLons,nLats,nAlts)
+  real :: true_temp(1:nLons,1:nLats,1:nAlts)
+  real :: nNO_excited(1:nLons,1:nLats,1:nAlts)
+  real :: energy_NO_emission
+  real :: emission_wavelength
+
+  ! [NO] cooling 
+  ! [Original Reference]: Kockarts,G., G.R.L.,VOL.7, PP.137-140,Feberary 1980 ]
+  ! [Updated  Reference]: Oberhide et al. JGR, VOL.118, PP.7283-7293, 2013
+  !---------
+  ! Updated 2022 by Jared M. Bell (JMB)
+  ! JMB:  Implement Update(s) from Oberhide et al. [2013] 
+  !       Incorporate changes currently active in WACCM-X
+  !---------
+  ! Note the constants for collisional de-excit/excit are in m^3/s
+  ! Thus, the net rate k_rxn * [O/O2] = s^-1 units
+  ! collision excitation rate due to O-NO and O2-NO 
+  !-----------
+  ! Use real temperature (in K)
+  true_temp(1:nLons,1:nLats,1:nAlts) = &
+        Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
+           TempUnit(1:nLons,1:nLats,1:nAlts)
+  !-------
+
+  !NOCooling = Planck_Constant * Speed_Light / &
+  !     5.3e-6 * &
+  !     Omega * 13.3 *  &
+  !     exp(- Planck_Constant * Speed_Light / &
+  !     (5.3e-6 * Boltzmanns_Constant * &
+  !     Temperature(1:nLons,1:nLats,1:nAlts,iBlock)* &
+  !     TempUnit(1:nLons,1:nLats,1:nAlts))) * &
+  !     NDensityS(1:nLons,1:nLats,1:nAlts,iNO_,iBlock)
+
+  emission_wavelength = 5.3e-06  ! emission wavelength (IR) in meter
+  energy_NO_emission = Planck_Constant*Speed_Light/emission_wavelength ! Energy in J
+  NO_spontaneous_emission(1:nLons,1:nLats,1:nAlts) = 12.54  ! Einstien coef 12.54 s^-1
+  Earthshine_NO_excitation(1:nLons,1:nLats,1:nAlts) = 1.06e-04 ! Earthshine excitation
+
+  !real :: NO_collisional_deexcitation(nLons, nLats, nAlts)
+  NO_collisional_deexcitation(1:nLons,1:nLats,1:nAlts) = &
+          (2.8e-17)*NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock)
+
+  NO_collisional_excitation(1:nLons,1:nLats,1:nAlts) = &
+          (2.8e-17)*NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock)*&
+           exp(-energy_NO_emission/Boltzmanns_Constant/true_temp(1:nLons,1:nLats,1:nAlts))
+
+  Omega = (NO_collisional_excitation + Earthshine_NO_excitation)/&
+       (NO_collisional_deexcitation + &
+        NO_collisional_excitation + Earthshine_NO_excitation + &
+        NO_spontaneous_emission )
+
+  NOCooling = energy_no_emission*&
+       Omega * &
+       NO_spontaneous_emission(1:nLons,1:nLats,1:nAlts) * &
+       NDensityS(1:nLons,1:nLats,1:nAlts,iNO_,iBlock)
+
+  NOCooling2d = 0.0
+  do iAlt=1,nAlts
+     RadiativeCooling2d(1:nLons, 1:nLats) = &
+          RadiativeCooling2d(1:nLons, 1:nLats) + &
+          NOCooling(1:nLons,1:nLats,iAlt) * &
+          dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
+     NOCooling2d = NOCooling2d + &
+          NOCooling(1:nLons,1:nLats,iAlt) * &
+          dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
+  enddo
+
+  NOCooling = NOCooling / TempUnit(1:nLons,1:nLats,1:nAlts) / &
+       (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
+
+endsubroutine calc_no_cooling
