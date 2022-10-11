@@ -28,6 +28,7 @@ MODULES = \
 	ModInputs.o\
 	ModLimiter.o\
 	ModMagTrace.o\
+	ModMesh.o\
 	ModNewell.o\
 	ModOrbital.o\
 	ModOvationSME.o\
