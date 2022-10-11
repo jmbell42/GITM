@@ -448,6 +448,7 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
        MeanMajorMass_1d, Gamma_1d, InvRadialDistance_C, &
        !ChemSources_1d, &
        Centrifugal, &
+       CD_MeshCoefs, &
        Gravity_G, Altitude_G,Cv_1D, dAlt_F
   use ModTime
   use ModInputs
