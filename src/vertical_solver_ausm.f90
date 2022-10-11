@@ -639,48 +639,25 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
      DiffLogINS(:,iSpecies) = DiffTmp
   enddo
 
-  ! Step 1:  Calculate Ln(rho_{s}/Rho)
+  ! JMB 2022 Update: Use CD Coefficients
   do iSpecies = 1, nSpecies
     LogConS(-1:nAlts+2,iSpecies) = &
          alog(Mass(iSpecies)*NS(-1:nAlts+2,iSpecies)/Rho(-1:nAlts+2))
-    !LogConS(-1:nAlts+2,iSpecies) = &
-    !     alog(NS(-1:nAlts+2,iSpecies)/NT(-1:nAlts+2))
   enddo 
 
   do iAlt = 1, nAlts
+   do iSpecies = 1, nSpecies
+         GradLogConS(iAlt,iSpecies) =  &
+            CD_MeshCoefs(iAlt,1)*LogConS(iAlt-2,iSpecies)&
+         +  CD_MeshCoefs(iAlt,2)*LogConS(iAlt-1,iSpecies)&
+         +  CD_MeshCoefs(iAlt,3)*LogConS(iAlt  ,iSpecies)&
+         +  CD_MeshCoefs(iAlt,4)*LogConS(iAlt+1,iSpecies)&
+         +  CD_MeshCoefs(iAlt,5)*LogConS(iAlt+2,iSpecies)
 
-     ! 4th Order Concentration Gradient
-     ! On Non-Uniform Mesh requires 5-pt Stencil
-     h1 = dAlt_F(iAlt-1)
-     h2 = dAlt_F(iAlt+0)
-     h3 = dAlt_F(iAlt+1)
-     h4 = dAlt_F(iAlt+2)
-
-     MeshH2 = h2 + h1
-     MeshH3 = h3 + h2 + h1
-     MeshH4 = h4 + h3 + h2 + h1
-
-     MeshCoef0 = (h2*h3*(h3+h4))/(h1*MeshH2*MeshH3*MeshH4)
-     MeshCoef1 = -1.0*(MeshH2*h3*(h3 + h4))/(h1*h2*(h2+h3)*(h2+h3+h4))
-     MeshCoef3 = MeshH2*h2*(h4 + h3)/(MeshH3*(h2+h3)*h3*h4) 
-     MeshCoef4 = -1.0*MeshH2*h2*h3/(MeshH4*(h2+h3+h4)*(h3+h4)*h4)
-
-     MeshCoef2 = (h2*h3*(h3+h4) + &
-                  MeshH2*h3*(h3+h4) - &
-                  MeshH2*h2*(h3+h4) - &
-                  MeshH2*h2*h3)/&
-                  (MeshH2*h2*h3*(h3+h4))
-
-     do iSpecies = 1, nSpecies
-        GradLogConS(iAlt,iSpecies) =  &
-          MeshCoef0*LogConS(iAlt-2,iSpecies)&
-       +  MeshCoef1*LogConS(iAlt-1,iSpecies)&
-       +  MeshCoef2*LogConS(iAlt  ,iSpecies)&
-       +  MeshCoef3*LogConS(iAlt+1,iSpecies)&
-       +  MeshCoef4*LogConS(iAlt+2,iSpecies)
-     enddo  ! iSpecies Loop
+      enddo  ! iSpecies Loop
   enddo ! iAlt Loop
-
+  !!!! JMB AUSM: BEGIN THE HYDROSTATIC BACKGROUND
+  !!!! We define a hydrostatic background to subtract off
   !!!! JMB AUSM: BEGIN THE HYDROSTATIC BACKGROUND
   !!!! We define a hydrostatic background to subtract off
   !!!! this removes errors introduced in the Grad(P) - rho*g
