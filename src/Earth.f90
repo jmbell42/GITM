@@ -206,37 +206,7 @@ subroutine calc_planet_sources(iBlock)
 
   if (UseOCooling) then 
 
-     ! [O] cooling 
-     ! Reference: Kockarts, G., Plant. Space Sci., Vol. 18, pp. 271-285, 1970
-     ! We reduce the LTE 63-um cooling rate by a factor of 2 for 
-     ! the non-LTE effects.[Roble,1987]         
-
-     tmp2 = exp(-228./(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-          TempUnit(1:nLons,1:nLats,1:nAlts)))
-     tmp3 = exp(-326./(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-          TempUnit(1:nLons,1:nLats,1:nAlts)))
-
-     ! In erg/cm3/s
-     OCooling = (1.69e-18*tmp2 + 4.59e-20*tmp3) * &
-          (NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock)/1.0e6) / &
-          (1.0 + 0.6*tmp2 + 0.2*tmp3)
-     ! In w/m3/3
-     OCooling = OCooling/10.0
-
-     OCooling2d = 0.0
-     do iAlt=1,nAlts
-        RadiativeCooling2d(1:nLons, 1:nLats) = &
-             RadiativeCooling2d(1:nLons, 1:nLats) + &
-             OCooling(1:nLons,1:nLats,iAlt) * &
-             dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
-        OCooling2d = OCooling2d + &
-             OCooling(1:nLons,1:nLats,iAlt) * &
-             dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
-     enddo
-
-     ! In our special units:
-     OCooling = OCooling/ TempUnit(1:nLons,1:nLats,1:nAlts) / &
-          (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
+     call calc_o3p_cooling(iBlock)
 
   else
 
@@ -646,3 +616,60 @@ subroutine calc_co2_cooling_fomichev(iBlock)
        (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
 
 endsubroutine calc_co2_cooling_fomichev
+
+subroutine calc_o3p_cooling(iBlock)
+
+  use ModSources
+  use ModEUV
+  use ModGITM
+  use ModTime
+  
+  implicit none
+
+  integer, intent(in) :: iBlock
+
+  integer :: iAlt, iError, iDir, iLat, iLon
+
+  real :: tmp2(nLons, nLats, nAlts)
+  real :: tmp3(nLons, nLats, nAlts)
+  real :: Omega(nLons, nLats, nAlts)
+
+  ! [O] cooling 
+  ! Reference: Kockarts, G., Plant. Space Sci., Vol. 18, pp. 271-285, 1970
+  ! We reduce the LTE 63-um cooling rate by a factor of 2 for 
+  ! the non-LTE effects.[Roble,1987]         
+
+  tmp2 = exp(-228./(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
+       TempUnit(1:nLons,1:nLats,1:nAlts)))
+  tmp3 = exp(-326./(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
+       TempUnit(1:nLons,1:nLats,1:nAlts)))
+
+  ! In erg/cm3/s
+  ! JMB: Updated to account for cool-to-space. Divide emission by 2.0
+  !      As only 1/2 is emitted outward and cools. 
+  !      Assumption: Downward propagating photons are re-absorbed.
+  !      Old form has 1.67e-18 for first coefficient, assuming all photons escape:
+  !      Also Note: The form below is consistent with current WACCM/WACCM-X  
+  ! Formula below calculates cooling rates in ergs/cm^3/s
+  OCooling = (0.8375e-18*tmp2 + 2.2545e-20*tmp3) * &
+       (NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock)/1.0e6) / &
+       (1.0 + 0.6*tmp2 + 0.2*tmp3)
+  ! Convert ergs/cm^3/s -> J/m^3/s
+  OCooling = OCooling/10.0
+
+  OCooling2d = 0.0
+  do iAlt=1,nAlts
+     RadiativeCooling2d(1:nLons, 1:nLats) = &
+          RadiativeCooling2d(1:nLons, 1:nLats) + &
+          OCooling(1:nLons,1:nLats,iAlt) * &
+          dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
+     OCooling2d = OCooling2d + &
+          OCooling(1:nLons,1:nLats,iAlt) * &
+          dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
+  enddo
+
+ ! Convert energy rates into [GITM Temp]/s
+ OCooling = OCooling/ TempUnit(1:nLons,1:nLats,1:nAlts) / &
+       (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
+
+endsubroutine calc_o3p_cooling
