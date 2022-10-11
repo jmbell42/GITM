@@ -63,9 +63,6 @@ subroutine advance_vertical(iLon,iLat,iBlock)
        MeanMajorMass_1d, &
        gamma_1d, &
        EddyCoef_1d, &
-       ViscCoef_1d, &
-       ViscCoefS_1d, &
-       KappaTemp_1d, &
        Gravity_G, Altitude_G, dAlt_C, InvRadialDistance_C, dAlt_F, InvDAlt_F, &
        Cv_1D, dAltdLon_1D, dAltdLat_1D, SZAVertical, MLatVertical
   
@@ -75,7 +72,6 @@ subroutine advance_vertical(iLon,iLat,iBlock)
   integer, intent(in) :: iLon, iLat, iBlock
 
   integer :: iIon, iSpecies, iAlt, iDim
-  real    :: KappaTemp1(0:nAlts+1)
 
   iLon1D   = iLon
   iLat1D   = iLat
@@ -84,13 +80,9 @@ subroutine advance_vertical(iLon,iLat,iBlock)
   SZAVertical = SZA(iLon,iLat,iBlock)
   MLatVertical=MLatitude(iLon,iLat,nAlts,iBlock)
 
-  KappaTemp1 = KappaTemp(iLon,iLat,:,iBlock)
   dAltdLon_1D = dAltdLon_CB(iLon,iLat,1,iBlock)
   dAltdLat_1D = dAltdLat_CB(iLon,iLat,1,iBlock)
   EddyCoef_1d(0:nAlts+1) = KappaEddyDiffusion(iLon,iLat,0:nAlts+1,iBlock)
-  ViscCoef_1d(0:nAlts+1) = ViscCoef(iLon,iLat,0:nAlts+1)
-  ViscCoefS_1d(0:nAlts+1,1:nSpecies) = ViscCoefS(iLon,iLat,0:nAlts+1,1:nSpecies)
-  KappaTemp_1d(0:nAlts+1) = KappaTemp(iLon,iLat,0:nAlts+1,iBlock)
   Cv_1D(-1:nAlts+2) = cp(iLon,iLat,-1:nAlts+2,iBlock)
   
   if (minval(NDensityS(iLon,iLat,:,1:nSpecies,iBlock)) <= 0.0) then

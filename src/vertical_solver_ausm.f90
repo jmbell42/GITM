@@ -444,9 +444,8 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
   use ModPlanet
   use ModSizeGitm
   use ModVertical, only : &
-       Heating, EddyCoef_1D, ViscCoef_1d, Coriolis, &
+       Heating, EddyCoef_1D, Coriolis, &
        MeanMajorMass_1d, Gamma_1d, InvRadialDistance_C, &
-       KappaTemp_1d, ViscCoefS_1d, &
        !ChemSources_1d, &
        Centrifugal, &
        Gravity_G, Altitude_G,Cv_1D, dAlt_F
@@ -565,12 +564,6 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
 
   ! JMB:  Use these as Limiters on Winds for an initial startup
   real :: TimeFactor, Vel0, DeltaV, VelocityCap
-
-  ! ----------------------------------------------------
-  ! JMB: 06/27/2016:---- THERMAL CONDUCTION & VISCOSITY
-  ! ----------------------------------------------------
-  real, dimension(1:nAlts)    :: VertVisc
-  real, dimension(1:nAlts)    :: ThermalCond
 
   !--------------------------------------------------------------------------
   !--------------------------------------------------------------------------

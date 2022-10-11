@@ -140,7 +140,6 @@ subroutine calc_planet_sources(iBlock)
   real :: tmp2(nLons, nLats, nAlts)
   real :: tmp3(nLons, nLats, nAlts)
   real :: Omega(nLons, nLats, nAlts)
-  real :: CO2Cooling(nLons, nLats, nAlts)
 
   LowAtmosRadRate = 0.0
 
@@ -153,37 +152,11 @@ subroutine calc_planet_sources(iBlock)
 
   call calc_co2(iBlock)
 
-  RadiativeCooling2d = 0.0
-
   if (UseCO2Cooling) then
 
-     ! The 0.165 is derived from the TIEGCM (2.65e-13 / 1.602e-12)
-     ! multiplied by 1e6 for /cm2 to /m2
-     CO2Cooling = 0.0
-!     CO2Cooling = 0.165e6 * NDensityS(1:nLons,1:nLats,1:nAlts,iCO2_,iBlock)*&
-!          exp(-960.0/( &
-!            Temperature(1:nLons,1:nLats,1:nAlts,iBlock)* &
-!            TempUnit(1:nLons,1:nLats,1:nAlts))) * &
-!          MeanMajorMass(1:nLons,1:nLats,1:nAlts) * ( &
-!           (NDensityS(1:nLons,1:nLats,1:nAlts,iO2_,iBlock)/Mass(iO2_) + &
-!            NDensityS(1:nLons,1:nLats,1:nAlts,iN2_,iBlock)/Mass(iN2_)) * &
-!           2.5e-15 / 1e6 + &
-!           (NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock)/Mass(iO_3P_)) * &
-!           1.0e-12 / 1e6) * 1.602e-19
-
-     CO2Cooling2d = 0.0
-     do iAlt=1,nAlts
-        RadiativeCooling2d(1:nLons, 1:nLats) = &
-             RadiativeCooling2d(1:nLons, 1:nLats) + &
-             CO2Cooling(1:nLons,1:nLats,iAlt) * &
-             dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
-        CO2Cooling2d = CO2Cooling2d + &
-             CO2Cooling(1:nLons,1:nLats,iAlt) * &
-             dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
-     enddo
-
-     CO2Cooling = CO2Cooling / TempUnit(1:nLons,1:nLats,1:nAlts) / &
-          (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
+     call calc_co2_cooling(iBlock)
+     ! fomichev version uses cool-to-space only
+     !call calc_co2_cooling_fomichev(iBlock)
 
   else
      CO2Cooling = 0.0
@@ -270,11 +243,6 @@ subroutine calc_planet_sources(iBlock)
      OCooling = 0.0
 
   endif
-
-!  do iAlt = 1,15
-!     write(*,*) 'no, co2 : ',iAlt, Altitude_GB(1,1,iAlt,iBlock)/1e3, &
-!          NOCooling(1,1,iAlt), CO2Cooling(1,1,iAlt)
-!  enddo
 
   RadCooling(1:nLons,1:nLats,1:nAlts,iBlock) = &
        OCooling + NOCooling + CO2Cooling
@@ -438,3 +406,243 @@ subroutine set_planet_defaults
 
 end subroutine set_planet_defaults
 
+
+subroutine calc_co2_cooling(iBlock)
+
+  use ModSources
+  use ModEUV
+  use ModGITM
+  use ModTime
+  
+  implicit none
+
+  integer, intent(in) :: iBlock
+
+  integer :: iAlt, iError, iDir, iLat, iLon
+
+  real :: tmp2(nLons, nLats, nAlts)
+  real :: tmp3(nLons, nLats, nAlts)
+  real :: Omega(nLons, nLats, nAlts)
+  ! Updated 2022 by Jared Bell (JMB):
+  ! Added more readily understood variables here
+  real :: CO2_collisional_excitation(nLons, nLats, nAlts)
+  real :: CO2_collisional_deexcitation(nLons, nLats, nAlts)
+  real :: CO2_spontaneous_emission(nLons,nLats,nAlts)
+  real :: true_temp(1:nLons,1:nLats,1:nAlts)
+  real :: nCO2_vibrational(1:nLons,1:nLats,1:nAlts)
+  real :: energy_CO2_emission
+  real :: emission_wavelength
+  ! Column Depth Efficiency
+  real :: co2_column_density(1:nLons,1:nLats,1:nAlts)
+  real :: co2_emission_cross_section
+  real :: epsilon_co2(1:nLons,1:nLats,1:nAlts)
+
+  
+  ! [CO2] cooling 
+  ! Use real temperature (in K)
+  true_temp(1:nLons,1:nLats,1:nAlts) = &
+        Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
+           TempUnit(1:nLons,1:nLats,1:nAlts)
+
+!  ! First, determine what optical thickness we are in
+  co2_emission_cross_section = 6.43e-19 ! m^2 15-micron absorption cross-section
+!  ! Step1: Calculate the column of CO2 above a given altitude
+!  ! Begin at exobase and integrate down:
+!  !----
+!  ! Assume that the column above the exobase is ~ n(CO2)*H(co2) in m^2
+  co2_column_density(1:nLons,1:nLats,nAlts) = &
+       NDensityS(1:nLons,1:nLats,nAlts,iCO2_,iBlock)*&
+       (-1.0)*&
+       (Boltzmanns_Constant*true_temp(1:nLons,1:nLats,nAlts)/&
+       ( Mass(iCO2_)*Gravity_GB(1:nLons,1:nLats, nAlts,iBlock)))
+!  !----
+!  ! Next integrate downward to a specific altitude and add up the CO2 above you
+!  ! Note that I just use the mean value between two cells:
+  do iAlt = nAlts-1, 1, -1
+     co2_column_density(1:nLons,1:nLats,iAlt) = &
+     co2_column_density(1:nLons,1:nLats,iAlt+1) + &
+       (0.5*(NDensityS(1:nLons,1:nLats,iAlt+1,iCO2_,iBlock) + &
+             NDensityS(1:nLons,1:nLats,iAlt  ,iCO2_,iBlock)))*&
+             dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
+    
+  enddo 
+
+  ! Set emission efficiency factor: epsilon_co2
+  ! Use Tabulated values quoted in Kumar and JAmes
+  ! Adapted by Johnstone, C.P. [2018]
+  where(co2_emission_cross_section*co2_column_density .ge. 2.0) 
+     epsilon_co2=&
+            0.7202*(co2_emission_cross_section*co2_column_density)**-0.613
+  else where 
+     ! Note, limit the lower value here
+     epsilon_co2=&
+             0.4732*(max(1.0e-10, &
+             co2_emission_cross_section*co2_column_density))**-0.0069
+  endwhere
+  !-------
+  ! Set the 15-micron cooling
+  emission_wavelength = 15.0e-06  ! emission wavelength (IR) in meter
+  energy_CO2_emission = Planck_Constant*Speed_Light/emission_wavelength ! Energy in J
+  CO2_spontaneous_emission(1:nLons,1:nLats,1:nAlts) = 0.46  ! Einstien coef 12.54 s^-1
+
+  ! Sum over all species [M] = O, O2, N2, CO2
+  ! Based upon numerical fits to Siddles et al. [1994] and
+  ! reported by Johnstone et al. [2018]
+  CO2_collisional_deexcitation(1:nLons,1:nLats,1:nAlts) = &
+         ( &
+           ! CO2-O
+           (5.10e-17)*(true_temp**-0.59)*&
+           NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock) + &
+           ! CO2-O2
+           (4.97e-28)*(true_temp**2.83)*&
+           NDensityS(1:nLons,1:nLats,1:nAlts,iO2_,iBlock) + &
+           ! CO2-N2
+           (6.43e-27)*(true_temp**2.30)*&
+           NDensityS(1:nLons,1:nLats,1:nAlts,iN2_,iBlock) + &
+           ! CO2-N2
+           (4.21e-23)*(true_temp**0.85)*&
+           NDensityS(1:nLons,1:nLats,1:nAlts,iCO2_,iBlock) )
+
+  ! From Castle et al. [2006]
+  CO2_collisional_excitation(1:nLons,1:nLats,1:nAlts) = &
+           2.0*CO2_collisional_deexcitation(1:nLons,1:nLats,1:nAlts)*&
+            exp(-667.0/true_temp) 
+
+  Omega = CO2_collisional_excitation/&
+         (CO2_collisional_deexcitation + &
+          CO2_collisional_excitation + &
+          CO2_spontaneous_emission*epsilon_co2 )
+
+  CO2Cooling = epsilon_co2*&
+      ( energy_co2_emission*Omega*CO2_spontaneous_emission)*&
+       NDensityS(1:nLons,1:nLats,1:nAlts,iCO2_,iBlock)
+
+  CO2Cooling2d = 0.0
+  do iAlt=1,nAlts
+     RadiativeCooling2d(1:nLons, 1:nLats) = &
+          RadiativeCooling2d(1:nLons, 1:nLats) + &
+          CO2Cooling(1:nLons,1:nLats,iAlt) * &
+          dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
+     CO2Cooling2d = CO2Cooling2d + &
+          CO2Cooling(1:nLons,1:nLats,iAlt) * &
+          dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
+  enddo
+  CO2Cooling = CO2Cooling / TempUnit(1:nLons,1:nLats,1:nAlts) / &
+       (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
+
+endsubroutine calc_co2_cooling
+
+! This version can be enabled to engage the fomichev
+! version of the CO2 Cooling--used in WACCM-X
+! Note: This produces higher cooling rates
+! Most likely due to the fact that we are not accounting
+! for re-absorption of photons/NIR heating  in the formulation
+! below--> it is inherently cool-to-space
+subroutine calc_co2_cooling_fomichev(iBlock)
+
+  use ModSources
+  use ModEUV
+  use ModGITM
+  use ModTime
+  
+  implicit none
+
+  integer, intent(in) :: iBlock
+
+  integer :: iAlt, iError, iDir, iLat, iLon
+
+  real :: tmp2(nLons, nLats, nAlts)
+  real :: tmp3(nLons, nLats, nAlts)
+  real :: Omega(nLons, nLats, nAlts)
+  ! Updated 2022 by Jared Bell (JMB):
+  ! Added more readily understood variables here
+  real :: CO2_collisional_excitation(nLons, nLats, nAlts)
+  real :: CO2_collisional_deexcitation(nLons, nLats, nAlts)
+  real :: CO2_spontaneous_emission(nLons,nLats,nAlts)
+  real :: true_temp(1:nLons,1:nLats,1:nAlts)
+  real :: nCO2_vibrational(1:nLons,1:nLats,1:nAlts)
+  real :: energy_CO2_emission
+  real :: emission_wavelength
+  ! Column Depth Efficiency
+  real :: co2_column_density(1:nLons,1:nLats,1:nAlts)
+  real :: co2_emission_cross_section
+  real :: epsilon_co2(1:nLons,1:nLats,1:nAlts)
+
+  
+  ! [CO2] cooling 
+  ! Use real temperature (in K)
+  true_temp(1:nLons,1:nLats,1:nAlts) = &
+        Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
+           TempUnit(1:nLons,1:nLats,1:nAlts)
+
+!  ! First, determine what optical thickness we are in
+  co2_emission_cross_section = 6.43e-19 ! m^2 15-micron absorption cross-section
+!  ! Step1: Calculate the column of CO2 above a given altitude
+!  ! Begin at exobase and integrate down:
+!  !----
+!  ! Assume that the column above the exobase is ~ n(CO2)*H(co2) in m^2
+  co2_column_density(1:nLons,1:nLats,nAlts) = &
+       NDensityS(1:nLons,1:nLats,nAlts,iCO2_,iBlock)*&
+       (-1.0)*&
+       (Boltzmanns_Constant*true_temp(1:nLons,1:nLats,nAlts)/&
+       ( Mass(iCO2_)*Gravity_GB(1:nLons,1:nLats, nAlts,iBlock)))
+!  !----
+!  ! Next integrate downward to a specific altitude and add up the CO2 above you
+!  ! Note that I just use the mean value between two cells:
+  do iAlt = nAlts-1, 1, -1
+     co2_column_density(1:nLons,1:nLats,iAlt) = &
+     co2_column_density(1:nLons,1:nLats,iAlt+1) + &
+       (0.5*(NDensityS(1:nLons,1:nLats,iAlt+1,iCO2_,iBlock) + &
+             NDensityS(1:nLons,1:nLats,iAlt  ,iCO2_,iBlock)))*&
+             dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
+    
+     ! Set emission efficiency factor: epsilon_co2
+     ! if very thin, epsilon -> 
+     epsilon_co2(1:nLons,1:nLats,iAlt) = &
+             exp(-1.0*co2_column_density(1:nLons,1:nLats,iAlt)*&
+                      co2_emission_cross_section)
+  enddo 
+  ! next, define epsilon = efficiency of photon escape
+  ! can vary from 0 (super thick atmosphere) to 1.0 (completely thin)
+  
+  !-------
+  ! Set the 15-micron cooling
+  emission_wavelength = 15.0e-06  ! emission wavelength (IR) in meter
+  energy_CO2_emission = Planck_Constant*Speed_Light/emission_wavelength ! Energy in J
+  CO2_spontaneous_emission(1:nLons,1:nLats,1:nAlts) = 1.28  ! Einstien coef 12.54 s^-1
+
+  ! Use formulation by Nischal et al. [2019]: SABER observations JGR, Space Physics, 124 2338-2356
+  ! Consider only O-CO2 collisional cooling: Others are much, much less
+  CO2_collisional_deexcitation(1:nLons,1:nLats,1:nAlts) = &
+         ( &
+           (3.5e-19)*sqrt(true_temp) + &
+           (2.32e-15)*exp(-76.25/(true_temp**(1.0/3.0)))&
+         )*NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock)
+
+  CO2_collisional_excitation(1:nLons,1:nLats,1:nAlts) = &
+           2.0*CO2_collisional_deexcitation(1:nLons,1:nLats,1:nAlts)*&
+            exp(-960.0/true_temp) 
+
+  Omega = CO2_collisional_excitation/&
+         (CO2_collisional_deexcitation + &
+          CO2_collisional_excitation + &
+          CO2_spontaneous_emission )
+
+  CO2Cooling = epsilon_co2(1:nLons,1:nLats,1:nAlts)*energy_co2_emission*&
+       Omega * CO2_spontaneous_emission(1:nLons,1:nLats,1:nAlts) *  &
+       NDensityS(1:nLons,1:nLats,1:nAlts,iCO2_,iBlock)
+
+  CO2Cooling2d = 0.0
+  do iAlt=1,nAlts
+     RadiativeCooling2d(1:nLons, 1:nLats) = &
+          RadiativeCooling2d(1:nLons, 1:nLats) + &
+          CO2Cooling(1:nLons,1:nLats,iAlt) * &
+          dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
+     CO2Cooling2d = CO2Cooling2d + &
+          CO2Cooling(1:nLons,1:nLats,iAlt) * &
+          dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
+  enddo
+  CO2Cooling = CO2Cooling / TempUnit(1:nLons,1:nLats,1:nAlts) / &
+       (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
+
+endsubroutine calc_co2_cooling_fomichev
