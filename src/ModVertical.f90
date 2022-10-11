@@ -41,11 +41,26 @@ module ModVertical
 
   real :: Heating(nAlts)
   real, dimension(-1:nAlts+2) :: EddyCoef_1d
-  real, dimension( 0:nAlts+1) :: ViscCoef_1d
-  real, dimension( 0:nAlts+1,1:nSpecies) :: ViscCoefS_1d
-  real :: KappaTemp_1d( 0:nAlts+1)
 
   real :: Centrifugal, Coriolis, Lat, Lon, dAltdlon_1D, dAltdLat_1D
+
+! JMB 01/2022
+  real, dimension(1:nAlts  ) :: CellVol1D
+  real, dimension(1:nAlts  ) :: Area_P12, Area_M12
+  real, dimension(0:nAlts+1, 1:3) :: &
+                   Mesh_ULP120, Mesh_ULP121, Mesh_ULP122, &
+                   Mesh_URM120, Mesh_URM121, Mesh_URM122
+  real, dimension(0:nAlts+1) :: &
+                   Mesh_CLP120, Mesh_CLP121, Mesh_CLP122, &
+                   Mesh_CRM120, Mesh_CRM121, Mesh_CRM122
+  real, dimension(0:nAlts+1,1:3) :: &
+                   Mesh_IS0, Mesh_IS1, Mesh_IS2
+  real, dimension(1:nAlts,1:5) :: &
+                   CD_MeshCoefs
+  real, dimension(1:3,1:5) :: &
+                   UB_MeshCoefs, LB_MeshCoefs
+!-- 
+
 
 end module ModVertical
 

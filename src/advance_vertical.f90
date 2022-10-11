@@ -49,6 +49,7 @@ subroutine advance_vertical(iLon,iLat,iBlock)
   use ModConstants, only: pi
   use ModSources, only: EUVHeating, KappaEddyDiffusion
   use ModInputs
+  use ModMesh
   use ModVertical, ONLY: &
        LogRho, &
        cMax1      => cMax,&
@@ -63,6 +64,14 @@ subroutine advance_vertical(iLon,iLat,iBlock)
        MeanMajorMass_1d, &
        gamma_1d, &
        EddyCoef_1d, &
+       CellVol1D, &
+       Area_P12, Area_M12, &
+       Mesh_ULP120, Mesh_ULP121, Mesh_ULP122, &
+       Mesh_CLP120, Mesh_CLP121, Mesh_CLP122, &
+       Mesh_URM120, Mesh_URM121, Mesh_URM122, &
+       Mesh_CRM120, Mesh_CRM121, Mesh_CRM122, &
+       Mesh_IS0, Mesh_IS1, Mesh_IS2, &
+       CD_MeshCoefs, UB_MeshCoefs, LB_MeshCoefs, &
        Gravity_G, Altitude_G, dAlt_C, InvRadialDistance_C, dAlt_F, InvDAlt_F, &
        Cv_1D, dAltdLon_1D, dAltdLat_1D, SZAVertical, MLatVertical
   
@@ -84,6 +93,36 @@ subroutine advance_vertical(iLon,iLat,iBlock)
   dAltdLat_1D = dAltdLat_CB(iLon,iLat,1,iBlock)
   EddyCoef_1d(0:nAlts+1) = KappaEddyDiffusion(iLon,iLat,0:nAlts+1,iBlock)
   Cv_1D(-1:nAlts+2) = cp(iLon,iLat,-1:nAlts+2,iBlock)
+  ! JMB: 2022.  Add Precomputed Mesh
+
+!  CellVol1D(1:nAlts) = NewCellVolume(iLon,iLat,1:nAlts,iBlock)
+!  Area_P12(1:nAlts) = AreaAlt_P12(iLon,iLat,1:nAlts,iBlock)
+!  Area_M12(1:nAlts) = AreaAlt_M12(iLon,iLat,1:nAlts,iBlock)
+  
+  Mesh_ULP120(0:nAlts+1,1:3) = AltMesh_ULP120(iLon,iLat,0:nAlts+1,1:3,iBlock)
+  Mesh_ULP121(0:nAlts+1,1:3) = AltMesh_ULP121(iLon,iLat,0:nAlts+1,1:3,iBlock)
+  Mesh_ULP122(0:nAlts+1,1:3) = AltMesh_ULP122(iLon,iLat,0:nAlts+1,1:3,iBlock)
+
+  Mesh_CLP120(0:nAlts+1) = AltMesh_CLP120(iLon,iLat,0:nAlts+1,iBlock)
+  Mesh_CLP121(0:nAlts+1) = AltMesh_CLP121(iLon,iLat,0:nAlts+1,iBlock)
+  Mesh_CLP122(0:nAlts+1) = AltMesh_CLP122(iLon,iLat,0:nAlts+1,iBlock)
+
+  Mesh_URM120(0:nAlts+1,1:3) = AltMesh_URM120(iLon,iLat,0:nAlts+1,1:3,iBlock)
+  Mesh_URM121(0:nAlts+1,1:3) = AltMesh_URM121(iLon,iLat,0:nAlts+1,1:3,iBlock)
+  Mesh_URM122(0:nAlts+1,1:3) = AltMesh_URM122(iLon,iLat,0:nAlts+1,1:3,iBlock)
+
+  Mesh_CRM120(0:nAlts+1) = AltMesh_CRM120(iLon,iLat,0:nAlts+1,iBlock)
+  Mesh_CRM121(0:nAlts+1) = AltMesh_CRM121(iLon,iLat,0:nAlts+1,iBlock)
+  Mesh_CRM122(0:nAlts+1) = AltMesh_CRM122(iLon,iLat,0:nAlts+1,iBlock)
+
+  Mesh_IS0(0:nAlts+1,1:3) = AltMesh_IS0(iLon,iLat,0:nAlts+1,1:3,iBlock)
+  Mesh_IS1(0:nAlts+1,1:3) = AltMesh_IS1(iLon,iLat,0:nAlts+1,1:3,iBlock)
+  Mesh_IS2(0:nAlts+1,1:3) = AltMesh_IS2(iLon,iLat,0:nAlts+1,1:3,iBlock)
+
+  CD_MeshCoefs(1:nAlts,1:5) = AltCDMeshCoef(iLon,iLat,1:nAlts,1:5,iBlock)
+  UB_MeshCoefs(1:3    ,1:5) = OS_UBMeshCoef(iLon,iLat,1:3,1:5,iBlock)
+  LB_MeshCoefs(1:3    ,1:5) = OS_LBMeshCoef(iLon,iLat,1:3,1:5,iBlock)
+  
   
   if (minval(NDensityS(iLon,iLat,:,1:nSpecies,iBlock)) <= 0.0) then
      write(*,*) "negative density found!"
