@@ -63,12 +63,6 @@ subroutine calc_neutral_friction(DtIn,oVel, EddyCoef_1d, NDensity_1d, NDensityS_
         do jSpecies = 1, nSpecies
            if (jSpecies == iSpecies) cycle
 
-           if (DoCheckForNans) then
-              if (isnan(Temp(iAlt))) write(*,*) "Friction : Temp is nan", iAlt
-              if (isnan(NDensity_1d(iAlt))) write(*,*) "Friction : NDen is nan", iAlt
-              if (isnan(NDensityS_1d(iAlt,jSpecies))) write(*,*) "Friction : NDenS is nan", iAlt,jSpecies
-           endif
-
            ! TempDij are the Dij binary coefficients
            ! Based upon the formulation by Banks and Kokarts.
            ! These coefficients demand that 
@@ -86,12 +80,23 @@ subroutine calc_neutral_friction(DtIn,oVel, EddyCoef_1d, NDensity_1d, NDensityS_
                 denscale*NDensityS_1d(iAlt, jSpecies)/ &
                 ( TempDij )
 
+           ! Sum over all species "t" /= "s"
+           ! 
+           EddyContribution(iSpecies) =  &
+           EddyContribution(iSpecies) +  &
+               DtIn*(kTOverM)*EddyCoef_1d(iAlt)*&
+               (NDensityS_1d(iAlt,jSpecies)*denscale/TempDij)*&
+               GradLogCon(iAlt,jSpecies)
         enddo  ! End DO over jSpecies
 
         EddyContribution(iSpecies) =  &
-             -1.0*EddyCoef_1d(iAlt)*GradLogCon(iAlt,iSpecies) 
-
+        EddyContribution(iSpecies) -  &
+            DtIn*(kTOverM)*EddyCoef_1d(iAlt)*&
+            InvDij(iSpecies)* GradLogCon(iAlt,iSpecies)
      enddo  !End DO Over iSpecies
+     ! Add forcing prior to the implicit update
+     Vel(1:nSpecies) = Vel(1:nSpecies) + & 
+            EddyContribution(1:nSpecies) 
 
      Matrix = -DtIn*CoefMatrix
      do iSpecies = 1, nSpecies
@@ -101,8 +106,8 @@ subroutine calc_neutral_friction(DtIn,oVel, EddyCoef_1d, NDensity_1d, NDensityS_
      call ludcmp(Matrix, nSpecies, nSpecies, iPivot, Parity)
      call lubksb(Matrix, nSpecies, nSpecies, iPivot, Vel)
 
-     oVel(iAlt, 1:nSpecies) = Vel(1:nSpecies) + & 
-         EddyContribution(1:nSpecies) 
+     ! Update the winds with implicit update
+     oVel(iAlt, 1:nSpecies) = Vel(1:nSpecies) 
   enddo
 
 end subroutine calc_neutral_friction
