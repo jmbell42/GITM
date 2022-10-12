@@ -93,8 +93,12 @@ subroutine set_vertical_bcs(LogRho,LogNS,Vel_GD,Temp, LogINS, iVel, VertVel)
   NS(-1:nAlts+2,1:nSpecies) = exp(LogNS(-1:nAlts+2,1:nSpecies))
 
   do iAlt = -1, nAlts + 2
-     EffectiveGravity(iAlt) = Gravity_G(iAlt) + &
-          Centrifugal / InvRadialDistance_C(iAlt) 
+     EffectiveGravity(iAlt) = &
+        Gravity_G(iAlt) + &
+        Centrifugal / InvRadialDistance_C(iAlt) + & 
+        (Vel_GD(iAlt,iNorth_)**2 + Vel_GD(iAlt,iEast_)**2) &
+        * InvRadialDistance_C(iAlt) + & 
+        Coriolis * Vel_GD(iAlt,iEast_)
   enddo 
 
   !------------------------------------------------------------

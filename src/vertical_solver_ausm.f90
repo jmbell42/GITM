@@ -562,9 +562,13 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
   logical :: SubtractHydrostatic(-1:nAlts+2,1:nSpecies)   
   real :: RadialDistance_C(-1:nAlts+2)
   real :: EffectiveGravity(-1:nAlts+2)
+  real :: EffectiveGravity_Energy(-1:nAlts+2)
 
   ! JMB:  Use these as Limiters on Winds for an initial startup
   real :: TimeFactor, Vel0, DeltaV, VelocityCap
+  real, dimension(-1:nAlts+2,nSpecies) :: DijS, LambdaS
+  real :: InvDij, TempDij, denscale, kTOverM
+  real :: InvScaleHeightAtm, ExpArg
 
   !--------------------------------------------------------------------------
   !--------------------------------------------------------------------------
@@ -574,10 +578,17 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
   VelocityCap = Vel0 + DeltaV*(1.0 - TimeFactor)
 
   do iAlt = -1, nAlts + 2
-  !   EffectiveGravity(iAlt) = &
-  !      Gravity_G(iAlt) 
-
      EffectiveGravity(iAlt) = &
+        Gravity_G(iAlt) + &
+        Centrifugal / InvRadialDistance_C(iAlt) + & 
+        (Vel_GD(iAlt,iNorth_)**2 + Vel_GD(iAlt,iEast_)**2) &
+        * InvRadialDistance_C(iAlt) + & 
+        Coriolis * Vel_GD(iAlt,iEast_)
+
+     ! Use this version in energy conservation.
+     ! Curvature and Coriolis forces disappear when calculating energy
+     ! conservation.
+     EffectiveGravity_Energy(iAlt) = &
         Gravity_G(iAlt) + &
         Centrifugal / InvRadialDistance_C(iAlt) 
   enddo 
@@ -601,6 +612,26 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
     Press(iAlt) = NT(iAlt)*Boltzmanns_Constant*Temp(iAlt)
     LogPress(iAlt) = alog(Press(iAlt))
   enddo
+
+  do iAlt = -1, nAlts+2
+     do iSpecies = 1, nSpecies
+        InvDij = 0.0
+        kTOverM = Boltzmanns_Constant * Temp(iAlt) / Mass(iSpecies)
+        denscale = 1.0/NT(iAlt) 
+        do jSpecies = 1, nSpecies
+           if (jSpecies == iSpecies) cycle
+              TempDij = (1.0e-04)*&              ! Scales the Dij from cm^2/s -> m^2/s
+                (   Diff0(iSpecies,jSpecies)*( Temp(iAlt)**DiffExp(iSpecies,jSpecies) )   ) / &
+                (    NT(iAlt)*(1.0e-06) )     ! Converts to #/cm^-3
+           InvDij = InvDij + &
+                denscale*NS(iAlt, jSpecies)/ &
+                ( TempDij )
+        enddo  ! End DO over jSpecies
+        DijS(iAlt,iSpecies) = 1.0/InvDij
+        LambdaS(iAlt,iSpecies) = EddyCoef_1d(iAlt)/DijS(iAlt,iSpecies)
+     enddo  !End DO Over iSpecies
+  enddo !iAlt = 1, nAlts
+
 
   call calc_rusanov_alts_ausm(LogPress ,GradLogPress,  DiffLogPress)
   call calc_rusanov_alts_ausm(LogRho ,GradLogRho,  DiffLogRho)
@@ -656,37 +687,13 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
 
       enddo  ! iSpecies Loop
   enddo ! iAlt Loop
-  !!!! JMB AUSM: BEGIN THE HYDROSTATIC BACKGROUND
-  !!!! We define a hydrostatic background to subtract off
+
   !!!! JMB AUSM: BEGIN THE HYDROSTATIC BACKGROUND
   !!!! We define a hydrostatic background to subtract off
   !!!! this removes errors introduced in the Grad(P) - rho*g
   !!!! that reduces the accuracy of non-hydrostatic calculations.
   HydroNS(-1:nAlts+2,1:nSpecies) = NS(-1:nAlts+2,1:nSpecies)
   HydroNT(-1:nAlts+2)            = NT(-1:nAlts+2)
-  !!! Calculate the Bulk Hydrostatic Density (NT)
-  do iAlt = 1, nAlts + 2
-    MeanMass = 0.5*(MeanMajorMass_1d(iAlt-1) + MeanMajorMass_1d(iAlt))
-    MeanGravity = 0.5*( EffectiveGravity(iAlt) + EffectiveGravity(iAlt-1) )
-    MeanTemp = 0.5*( Temp(iAlt) + Temp(iAlt-1) )
-    InvScaleHeight = -1.0* MeanMass*MeanGravity/&
-                     (Boltzmanns_Constant*MeanTemp)
-    HydroNT(iAlt) = HydroNT(iAlt-1)*(Temp(iAlt-1)/Temp(iAlt))*&
-          exp (-1.0*dAlt_F(iAlt)*InvScaleHeight)
-  enddo 
-  iAlt = -1
-  MeanMass = 0.5*( MeanMajorMass_1d(-1) + MeanMajorMass_1d(0))
-  MeanGravity = 0.5*( EffectiveGravity(iAlt+1) + EffectiveGravity(iAlt) )
-  MeanTemp = 0.5*( Temp(iAlt+1) + Temp(iAlt) )
-  InvScaleHeight = -1.0* MeanMass*MeanGravity/&
-                  (Boltzmanns_Constant*MeanTemp)
-  HydroNT(iAlt) = HydroNT(iAlt+1)*(Temp(iAlt+1)/Temp(iAlt))*&
-                  exp(dAlt_F(iAlt)*InvScaleHeight)
-  !!! Calculate a Background Atmosphere for each species
-  !!! Note: This really only works for the major species
-  !!! which is fine, since minor species will have large difference
-  !!! Grad(P) - rho*g terms and are not subject to the same level
-  !!! of sensitivity.
   do iSpecies =  1, nSpecies
      do iAlt = 1, nAlts + 2
      MeanMass = Mass(iSpecies)
@@ -694,31 +701,39 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
      MeanTemp = 0.5*( Temp(iAlt) + Temp(iAlt-1) )
      InvScaleHeight = -1.0* MeanMass*MeanGravity/&
                       (Boltzmanns_Constant*MeanTemp)
+
+     MeanMass = 0.5*(MeanMajorMass_1d(iAlt-1) + MeanMajorMass_1d(iAlt))
+     InvScaleHeightAtm = -1.0* MeanMass*MeanGravity/&
+                          (Boltzmanns_Constant*MeanTemp)
+     ExpArg = ( LambdaS(iAlt,iSpecies)*InvScaleHeightAtm + &
+                 InvScaleHeight)/&
+              ( 1.0 + LambdaS(iAlt,iSpecies))
+
      HydroNS(iAlt,iSpecies) = &
            HydroNS(iAlt-1,iSpecies)*(Temp(iAlt-1)/Temp(iAlt))*&
-           exp (-1.0*dAlt_F(iAlt)*InvScaleHeight)
+           exp (-1.0*dAlt_F(iAlt)*ExpArg)
+
      enddo 
   enddo 
-  ! Extend the densities downward with the mean mass of the atmosphere
-  do iSpecies =  1, nSpecies
-     iAlt = -1
-     MeanMass = 0.5*( MeanMajorMass_1d(-1) + MeanMajorMass_1d(0))
-     MeanGravity = 0.5*( EffectiveGravity(iAlt+1) + EffectiveGravity(iAlt) )
-     MeanTemp = 0.5*( Temp(iAlt+1) + Temp(iAlt) )
-     InvScaleHeight = -1.0* MeanMass*MeanGravity/&
-                      (Boltzmanns_Constant*MeanTemp)
-     HydroNS(iAlt,iSpecies) = &
-               HydroNS(iAlt+1,iSpecies)*(Temp(iAlt+1)/Temp(iAlt))*&
-               exp(dAlt_F(iAlt)*InvScaleHeight)
-  enddo 
+!--------------
   do iAlt = -1, nAlts + 2
      do iSpecies =  1, nSpecies
        HydroPressureS(iAlt,iSpecies) = &
            HydroNS(iAlt,iSpecies)*Boltzmanns_Constant*Temp(iAlt)
        HydroRhoS(iAlt,iSpecies) = Mass(iSpecies)*HydroNS(iAlt,iSpecies)
      enddo 
-       HydroPressure(iAlt) = HydroNT(iAlt)*Boltzmanns_Constant*Temp(iAlt)
-            HydroRho(iAlt) = HydroNT(iAlt)*MeanMajorMass_1d(iAlt)
+  enddo 
+!--------------
+  do iAlt = 1, nAlts + 2
+    HydroNT(iAlt) = 0.0
+    HydroRho(iAlt) = 0.0
+    do iSpecies = 1, nSpecies
+       HydroNT(iAlt) = HydroNT(iAlt) + &
+        HydroNS(iAlt,iSpecies)
+
+       HydroRho(iAlt) = HydroRho(iAlt) + &
+        HydroRhoS(iAlt,iSpecies)
+    enddo 
   enddo 
   do iSpecies = 1, nSpecies
      RhoS(-1:nAlts+2,iSpecies) =  &
@@ -850,14 +865,19 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
         NewVertVel(iAlt,iSpecies) = &
            NewMomentumS(iAlt,iSpecies)/NewRhoS(iAlt,iSpecies) 
         ! Add Explicit Spherical Curvature Terms here
-        NewVertVel(iAlt,iSpecies) = &
-           NewVertVel(iAlt,iSpecies) + DtIn*&
-            (Vel_GD(iAlt,iNorth_)**2 + Vel_GD(iAlt,iEast_)**2) &
-            * InvRadialDistance_C(iAlt) 
         !------
-        if (UseCoriolis) then
-           NewVertVel(iAlt,ispecies) = NewVertVel(iAlt,ispecies) + DtIn * ( &
-                Coriolis * Vel_GD(iAlt,iEast_))
+        if(SubtractHydrostatic(iAlt, iSpecies) )then
+           ! Correction for making the background atmosphere use the full
+           ! diffusive equilibrium formulation
+           MeanGravity = 0.5*(EffectiveGravity(iAlt-1) + &
+                              EffectiveGravity(iAlt  ) )
+           MeanMass = 0.5*(MeanMajorMass_1d(iAlt-1) + &
+                           MeanMajorMass_1d(iAlt  ) )
+      
+           NewVertVel(iAlt,iSpecies) = NewVertVel(iAlt,iSpecies) + &
+             DtIn*(HydroRhoS(iAlt,iSpecies)/RhoS(iAlt,iSpecies))*MeanGravity *&
+             (LambdaS(iAlt,iSpecies)/(1.0 + LambdaS(iAlt,iSpecies)))*&
+               ( 1.0 - MeanMass/Mass(iSpecies)) 
         endif
         ! Thermal Diffusion Effects (For Light Species H2, H, and He) 
         ! ThermalDiffCoefS is set in calc_rates
@@ -945,7 +965,7 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
      ! AUSM Method
      NewTotalEnergy(iAlt)   = TotalEnergy(iAlt) - &
          DtIn*AUSMTotalEnergyFluxes(iAlt) + &
-         DtIn*Rho(iAlt)*Vel_GD(iAlt,iUp_)*EffectiveGravity(iAlt) 
+         DtIn*Rho(iAlt)*Vel_GD(iAlt,iUp_)*EffectiveGravity_Energy(iAlt) 
  
      NewPress(iAlt) = &
         (NewTotalEnergy(iAlt) - &
