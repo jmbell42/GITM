@@ -32,6 +32,16 @@ module ModGITM
   real, allocatable :: Gravity_GB(:,:,:,:)
   real, allocatable :: CellVolume(:,:,:,:)
 
+! New Mesh Calculations :  JMB 01/2022
+  real, allocatable :: NewCellVolume(:,:,:,:)
+  real, allocatable :: AreaLon_P12(:,:,:,:)
+  real, allocatable :: AreaLon_M12(:,:,:,:)
+  real, allocatable :: AreaLat_P12(:,:,:,:)
+  real, allocatable :: AreaLat_M12(:,:,:,:)
+  real, allocatable :: AreaAlt_P12(:,:,:,:)
+  real, allocatable :: AreaAlt_M12(:,:,:,:)
+
+
   ! RCMR
   real :: f107_est, f107a_est, f107_msis, f107a_msis
   real :: PhotoElectronHeatingEfficiency_est, EDC_est(1,1)
@@ -203,6 +213,15 @@ contains
     allocate(InvRadialDistance_GB(-1:nLons+2,-1:nLats+2,-1:nAlts+2,nBlocks))
     allocate(Gravity_GB(-1:nLons+2,-1:nLats+2,-1:nAlts+2,nBlocks))
     allocate(CellVolume(-1:nLons+2,-1:nLats+2,-1:nAlts+2,nBlocks))
+! JMB 01/2022
+    allocate(NewCellVolume(-1:nLons+2  ,-1:nLats+2  ,1:nAlts,nBlocks))
+    allocate(AreaLon_P12(-1:nLons+2  ,-1:nLats+2  ,1:nAlts  ,nBlocks))
+    allocate(AreaLon_M12(-1:nLons+2  ,-1:nLats+2  ,1:nAlts  ,nBlocks))
+    allocate(AreaLat_P12(-1:nLons+2  ,-1:nLats+2  ,1:nAlts  ,nBlocks))
+    allocate(AreaLat_M12(-1:nLons+2  ,-1:nLats+2  ,1:nAlts  ,nBlocks))
+    allocate(AreaAlt_P12(-1:nLons+2  ,-1:nLats+2  ,1:nAlts  ,nBlocks))
+    allocate(AreaAlt_M12(-1:nLons+2  ,-1:nLats+2  ,1:nAlts  ,nBlocks))
+! --
     allocate(dAltDLon_CB(nLons,nLats,nAlts,nBlocks))
     allocate(dAltDLat_CB(nLons,nLats,nAlts,nBlocks))
     allocate(Rho(-1:nLons+2, -1:nLats+2, -1:nAlts+2, nBlocks))
@@ -283,6 +302,15 @@ contains
     deallocate(InvRadialDistance_GB)
     deallocate(Gravity_GB)
     deallocate(CellVolume)
+! JMB 01/2022
+    deallocate(NewCellVolume)
+    deallocate(AreaLon_P12)
+    deallocate(AreaLon_M12)
+    deallocate(AreaLat_P12)
+    deallocate(AreaLat_M12)
+    deallocate(AreaAlt_P12)
+    deallocate(AreaAlt_M12)
+!--
     deallocate(dAltDLon_CB)
     deallocate(dAltDLat_CB)
     deallocate(Rho)

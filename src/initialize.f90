@@ -31,6 +31,11 @@ subroutine initialize_gitm(TimeIn)
   logical :: IsThere, IsOk, IsDone, IsFirstTime = .true.
 
   real :: DistM, DistP, Ratio2, InvDenom
+  ! New Volume and Area Variables
+  real :: Theta_P12, Theta_M12
+  real :: Phi_P12, Phi_M12
+  real :: R_P12, R_M12
+
   !----------------------------------------------------------------------------
 
 !! Sorry but this is a double-negative
@@ -265,6 +270,63 @@ subroutine initialize_gitm(TimeIn)
   InvDLatDist_FB = 1.0/dLatDist_FB
   InvDLonDist_GB = 1.0/dLonDist_GB
   InvDLonDist_FB = 1.0/dLonDist_FB
+
+  do iBlock = 1, nBlocks
+     do iAlt =  1, nAlts
+        !do iLat = -1, nLats+2
+         !  do iLon = -1, nLons+2
+        do iLat =  0, nLats+1
+           do iLon =  0, nLons+1
+
+              Theta_P12 = 0.5*(Latitude(iLat+1,iBlock) + Latitude(iLat,iBlock))
+              Theta_M12 = 0.5*(Latitude(iLat-1,iBlock) + Latitude(iLat,iBlock))
+
+              Phi_P12 = 0.5*(Longitude(iLon+1,iBlock) + Longitude(iLon,iBlock))
+              Phi_M12 = 0.5*(Longitude(iLon-1,iBlock) + Longitude(iLon,iBlock))
+
+              R_P12 = 0.5*(RadialDistance_GB(iLon,iLat,iAlt+1,iBlock) + &
+                           RadialDistance_GB(iLon,iLat,iAlt  ,iBlock))
+              R_M12 = 0.5*(RadialDistance_GB(iLon,iLat,iAlt-1,iBlock) + &
+                           RadialDistance_GB(iLon,iLat,iAlt  ,iBlock))
+
+              NewCellVolume(iLon,iLat,iAlt,iBlock) = &
+                   (Phi_P12 - Phi_M12)*&
+                   (sin(Theta_P12) - sin(Theta_M12))*&
+                   (R_P12**3.0 - R_M12**3.0)/3.0
+
+              AreaAlt_P12(iLon,iLat,iAlt,iBlock) = &
+                   (Phi_P12 - Phi_M12)*&
+                   (sin(Theta_P12) - sin(Theta_M12))*&
+                   R_P12**2.0 
+
+              AreaAlt_M12(iLon,iLat,iAlt,iBlock) = &
+                   (Phi_P12 - Phi_M12)*&
+                   (sin(Theta_P12) - sin(Theta_M12))*&
+                   R_M12**2.0 
+
+              AreaLat_P12(iLon,iLat,iAlt,iBlock) = &
+                   cos(Theta_P12)*&
+                   (Phi_P12 - Phi_M12)*&
+                   (R_P12**2.0 - R_M12**2.0)/2.0
+
+              AreaLat_M12(iLon,iLat,iAlt,iBlock) = &
+                   cos(Theta_M12)*&
+                   (Phi_P12 - Phi_M12)*&
+                   (R_P12**2.0 - R_M12**2.0)/2.0 
+
+              AreaLon_P12(iLon,iLat,iAlt,iBlock) = &
+                   (Theta_P12 - Theta_M12)*&
+                   (R_P12**2.0 - R_M12**2.0)/2.0
+
+              AreaLon_M12(iLon,iLat,iAlt,iBlock) = &
+                   (Theta_P12 - Theta_M12)*&
+                   (R_P12**2.0 - R_M12**2.0)/2.0 
+
+           enddo !iLon = 0, nLons+1
+        enddo !iLat = 0, nLats+1
+     enddo !iAlt = -1, nAlts+2
+  enddo !iBlock = 1, nBlocks
+
 
   ! Precalculate the coefficients for the gradient calculation
   do iBlock = 1, nBlocks

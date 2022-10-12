@@ -1069,6 +1069,7 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   use ModSizeGitm
   use ModVertical, only : dAlt_C, cMax, VertVel, Gamma_1D, &
                           LogRho, Vel_GD, MeanMajorMass_1d, &
+                          CellVol1D, Area_P12, Area_M12, &
                           Temp, Altitude_G
 
 
@@ -2003,10 +2004,13 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
     enddo 
 
     do iAlt = 1, nAlts
-          AreaFunction_P12(iAlt) = RightRadius(iAlt)**2.0
-          AreaFunction_M12(iAlt) = LeftRadius(iAlt)**2.0
-          LocalCellVolume(iAlt) = &
-             (1.0/3.0)*(RightRadius(iAlt)**3.0 - LeftRadius(iAlt)**3.0)
+          !AreaFunction_P12(iAlt) = RightRadius(iAlt)**2.0
+          !AreaFunction_M12(iAlt) = LeftRadius(iAlt)**2.0
+          !LocalCellVolume(iAlt) = &
+          !   (1.0/3.0)*(RightRadius(iAlt)**3.0 - LeftRadius(iAlt)**3.0)
+          AreaFunction_P12(iAlt) = Area_P12(iAlt)
+          AreaFunction_M12(iAlt) = Area_M12(iAlt)
+          LocalCellVolume(iAlt) = CellVol1D(iAlt)
     enddo 
 
     do iSpecies = 1, nSpecies

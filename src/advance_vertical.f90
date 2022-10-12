@@ -95,9 +95,9 @@ subroutine advance_vertical(iLon,iLat,iBlock)
   Cv_1D(-1:nAlts+2) = cp(iLon,iLat,-1:nAlts+2,iBlock)
   ! JMB: 2022.  Add Precomputed Mesh
 
-!  CellVol1D(1:nAlts) = NewCellVolume(iLon,iLat,1:nAlts,iBlock)
-!  Area_P12(1:nAlts) = AreaAlt_P12(iLon,iLat,1:nAlts,iBlock)
-!  Area_M12(1:nAlts) = AreaAlt_M12(iLon,iLat,1:nAlts,iBlock)
+  CellVol1D(1:nAlts) = NewCellVolume(iLon,iLat,1:nAlts,iBlock)
+  Area_P12(1:nAlts) = AreaAlt_P12(iLon,iLat,1:nAlts,iBlock)
+  Area_M12(1:nAlts) = AreaAlt_M12(iLon,iLat,1:nAlts,iBlock)
   
   Mesh_ULP120(0:nAlts+1,1:3) = AltMesh_ULP120(iLon,iLat,0:nAlts+1,1:3,iBlock)
   Mesh_ULP121(0:nAlts+1,1:3) = AltMesh_ULP121(iLon,iLat,0:nAlts+1,1:3,iBlock)
