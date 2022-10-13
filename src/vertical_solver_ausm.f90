@@ -1090,7 +1090,7 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   use ModVertical, only : dAlt_C, cMax, VertVel, Gamma_1D, &
                           LogRho, Vel_GD, MeanMajorMass_1d, &
                           CellVol1D, Area_P12, Area_M12, &
-                          Temp, Altitude_G
+                          Temp, Altitude_G, dAlt_F
 
 
   use ModPlanet, only : nSpecies, nIonsAdvect, Mass, RBody, &
@@ -1275,6 +1275,15 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   real :: LogKpS(1:nAlts,1:nSpecies), LogKuS(1:nAlts,1:nSpecies)
   real :: LogMinKpS(1:nAlts,1:nSpecies), LogMinKuS(1:nAlts,1:nSpecies)
   real :: LogMaxKpS(1:nAlts,1:nSpecies), LogMaxKuS(1:nAlts,1:nSpecies)
+!
+  real :: ZVar, VL, CL, VR, CR
+!
+  real :: LiouKpS_P12(1:nAlts,1:nSpecies), LiouKuS_P12(1:nAlts,1:nSpecies)
+  real :: LiouKpS_M12(1:nAlts,1:nSpecies), LiouKuS_M12(1:nAlts,1:nSpecies)
+  real :: LogKpS_P12(1:nAlts,1:nSpecies), LogKuS_P12(1:nAlts,1:nSpecies)
+  real :: LogKpS_M12(1:nAlts,1:nSpecies), LogKuS_M12(1:nAlts,1:nSpecies)
+  real :: Alt_P12, Alt_M12
+  real :: MachScaling
 
 !  write(*,*) 'Key Variables =================='
 !  do iAlt = -1, nAlts + 2
@@ -1313,11 +1322,46 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   Ku(1:nAlts,1:nSpecies) = 2.0             !! Ullrich et al. [2011]
 
 !!! 1-D Settings
-  MinKuS(1:nAlts,1:nSpecies) = 0.25
-  MaxKuS(1:nAlts,1:nSpecies) = 0.50
+!  MinKuS(1:nAlts,1:nSpecies) = 0.25
+!  MaxKuS(1:nAlts,1:nSpecies) = 0.50
+!
+!  MinKpS(1:nAlts,1:nSpecies) = 1.0e-19
+!  MaxKpS(1:nAlts,1:nSpecies) = 1.0e-09
+!
+!  LogMaxKuS = alog(MaxKuS)
+!  LogMinKuS = alog(MinKuS)
+!
+!  LogMaxKpS = alog(MaxKpS)
+!  LogMinKpS = alog(MinKpS)
+!
+!   KpWidth = 15.0e+03
+!   KpAltMidPoint = 160.0e+03
+! 
+!  do iAlt = 1, nAlts
+!     do iSpecies = 1, nSpecies
+!         LogKpS(iAlt,iSpecies) = LogMinKpS(iAlt,iSpecies) +  &
+!               0.5*(LogMaxKpS(iAlt,iSpecies) - LogMinKpS(iAlt,iSpecies))*&
+!               ( 1.0 + tanh(  (Altitude_G(iAlt) - KpAltMidPoint)/KpWidth ) )
+!
+!         LogKuS(iAlt,iSpecies) = LogMinKuS(iAlt,iSpecies) +  &
+!               0.5*(LogMaxKuS(iAlt,iSpecies) - LogMinKuS(iAlt,iSpecies))*&
+!               ( 1.0 + tanh(  (Altitude_G(iAlt) - KpAltMidPoint)/KpWidth ) )
+!
+!        LiouKpS(iAlt,iSpecies) = exp(LogKpS(iAlt,iSpecies))
+!             Ku(iAlt,iSpecies) = exp(LogKuS(iAlt,iSpecies))
+!     enddo 
+!  enddo 
 
-  MinKpS(1:nAlts,1:nSpecies) = 1.0e-19
-  MaxKpS(1:nAlts,1:nSpecies) = 1.0e-09
+  ! The Original Settings
+  MinKuS(1:nAlts,1:nSpecies) = 2.00
+  MaxKuS(1:nAlts,1:nSpecies) = 3.00
+  MinKpS(1:nAlts,1:nSpecies) = 1.0e-04
+  MaxKpS(1:nAlts,1:nSpecies) = 0.25
+
+
+  !!KpWidth = 100.0e+03
+  KpWidth = 10.0e+03
+  KpAltMidPoint = Altitude_G(1)
 
   LogMaxKuS = alog(MaxKuS)
   LogMinKuS = alog(MinKuS)
@@ -1325,23 +1369,78 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   LogMaxKpS = alog(MaxKpS)
   LogMinKpS = alog(MinKpS)
 
-   KpWidth = 15.0e+03
-   KpAltMidPoint = 160.0e+03
- 
   do iAlt = 1, nAlts
      do iSpecies = 1, nSpecies
-         LogKpS(iAlt,iSpecies) = LogMinKpS(iAlt,iSpecies) +  &
-               0.5*(LogMaxKpS(iAlt,iSpecies) - LogMinKpS(iAlt,iSpecies))*&
-               ( 1.0 + tanh(  (Altitude_G(iAlt) - KpAltMidPoint)/KpWidth ) )
+     
+        ! Alt_P12 = 0.5*(Altitude_G(iAlt) + Altitude_G(iAlt+1))
+        ! Alt_M12 = 0.5*(Altitude_G(iAlt) + Altitude_G(iAlt-1))
+        ! LogKpS_P12(iAlt,iSpecies) = LogMinKpS(iAlt,iSpecies) +  &
+        !       0.5*(LogMaxKpS(iAlt,iSpecies) - LogMinKpS(iAlt,iSpecies))*&
+        !       ( 1.0 + tanh(  (Alt_P12- KpAltMidPoint)/KpWidth ) )
+!
+!         LogKpS_M12(iAlt,iSpecies) = LogMinKpS(iAlt,iSpecies) +  &
+!               0.5*(LogMaxKpS(iAlt,iSpecies) - LogMinKpS(iAlt,iSpecies))*&
+!               ( 1.0 + tanh(  (Alt_M12 - KpAltMidPoint)/KpWidth ) )
+!
+!
+!         LogKuS_P12(iAlt,iSpecies) = LogMinKuS(iAlt,iSpecies) +  &
+!               0.5*(LogMaxKuS(iAlt,iSpecies) - LogMinKuS(iAlt,iSpecies))*&
+!               ( 1.0 + tanh(  (Alt_P12- KpAltMidPoint)/KpWidth ) )
+!
+!         LogKuS_M12(iAlt,iSpecies) = LogMinKuS(iAlt,iSpecies) +  &
+!               0.5*(LogMaxKuS(iAlt,iSpecies) - LogMinKuS(iAlt,iSpecies))*&
+!               ( 1.0 + tanh(  (Alt_M12 - KpAltMidPoint)/KpWidth ) )
+!
 
-         LogKuS(iAlt,iSpecies) = LogMinKuS(iAlt,iSpecies) +  &
-               0.5*(LogMaxKuS(iAlt,iSpecies) - LogMinKuS(iAlt,iSpecies))*&
-               ( 1.0 + tanh(  (Altitude_G(iAlt) - KpAltMidPoint)/KpWidth ) )
+     
+         Alt_P12 = 0.5*(Altitude_G(iAlt) + Altitude_G(iAlt+1))
+         Alt_M12 = 0.5*(Altitude_G(iAlt) + Altitude_G(iAlt-1))
 
-        LiouKpS(iAlt,iSpecies) = exp(LogKpS(iAlt,iSpecies))
-             Ku(iAlt,iSpecies) = exp(LogKuS(iAlt,iSpecies))
+         LogKpS_P12(iAlt,iSpecies) = LogMinKpS(iAlt,iSpecies) +  &
+               (LogMaxKpS(iAlt,iSpecies) - LogMinKpS(iAlt,iSpecies))*&
+               (tanh(  (Alt_P12- KpAltMidPoint)/KpWidth ) )
+
+         LogKpS_M12(iAlt,iSpecies) = LogMinKpS(iAlt,iSpecies) +  &
+               (LogMaxKpS(iAlt,iSpecies) - LogMinKpS(iAlt,iSpecies))*&
+               (tanh(  (Alt_M12 - KpAltMidPoint)/KpWidth ) )
+
+!
+         LogKuS_P12(iAlt,iSpecies) = LogMinKuS(iAlt,iSpecies) +  &
+               (LogMaxKuS(iAlt,iSpecies) - LogMinKuS(iAlt,iSpecies))*&
+               (tanh(  (Alt_P12- KpAltMidPoint)/KpWidth ) )
+
+         LogKuS_M12(iAlt,iSpecies) = LogMinKuS(iAlt,iSpecies) +  &
+               (LogMaxKuS(iAlt,iSpecies) - LogMinKuS(iAlt,iSpecies))*&
+               (tanh(  (Alt_M12 - KpAltMidPoint)/KpWidth ) )
+!
+         !MachScaling = min(1.0, abs(0.5*(MLeft_P12(iAlt,iSpecies) + &
+         !                               MRight_P12(iAlt,iSpecies))))
+         !MachScaling = 1.0
+         !LiouKpS_P12(iAlt,iSpecies) = &
+         !      (MachScaling**2.0)*exp(LogKpS_P12(iAlt,iSpecies))
+         !LiouKpS_P12(iAlt,iSpecies) = &
+         !      (MachScaling)*exp(LogKpS_P12(iAlt,iSpecies))
+
+         !MachScaling = min(1.0, abs(0.5*(MLeft_M12(iAlt,iSpecies) + &
+         !                               MRight_M12(iAlt,iSpecies))))
+
+         !MachScaling = 1.0
+         !LiouKpS_M12(iAlt,iSpecies) = &
+         !      (MachScaling**2.0)*exp(LogKpS_M12(iAlt,iSpecies))
+!         LiouKpS_M12(iAlt,iSpecies) = &
+!               (MachScaling**2.0)*exp(LogKpS_M12(iAlt,iSpecies))
+
+         LiouKpS_P12(iAlt,iSpecies) = exp(LogKpS_P12(iAlt,iSpecies))
+         LiouKpS_M12(iAlt,iSpecies) = exp(LogKpS_M12(iAlt,iSpecies))
+
+         LiouKuS_P12(iAlt,iSpecies) = exp(LogKuS_P12(iAlt,iSpecies))
+         LiouKuS_M12(iAlt,iSpecies) = exp(LogKuS_M12(iAlt,iSpecies))
+
      enddo 
   enddo 
+
+!!!! Grab the left and right states of the Variables
+!!!!  on boh Interfaces (P12 = +1/2 and M12 = -1/2)
 
 !!!! Grab the left and right states of the Variables
 !!!!  on boh Interfaces (P12 = +1/2 and M12 = -1/2)
@@ -1811,54 +1910,103 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   enddo 
 
 !!! Begin 2nd Order Mach Number Polynomials
-  do iSpecies = 1, nSpecies
-    do iAlt = 1, nAlts 
+!  do iSpecies = 1, nSpecies
+!    do iAlt = 1, nAlts 
+!
+!       ModifiedZeta(iAlt,iSpecies) = 1.0
+!
+!!!!! Hydrostatic Species Use This one
+!       MPress_M12(iAlt,iSpecies) = &
+!         LiouKpS(iAlt,iSpecies)*max( (1.0 - M2Bar_M12(iAlt,iSpecies)), 0.0)*&
+!         ((PressureSRight_M12(iAlt, iSpecies) - &
+!         HydroPressureSRight_M12(iAlt,iSpecies) ) - &
+!         (PressureSLeft_M12(iAlt, iSpecies) - &
+!          HydroPressureSLeft_M12(iAlt,iSpecies) ) )/ &
+!         ( MeanRhoS_M12(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
+!         (FA_M12(iAlt,iSpecies)*MeanCS_M12(iAlt) + &
+!          ModifiedZeta(iAlt,iSpecies)*dAlt_C(iAlt)/DtIn)  ) 
+!
+!       MPress_P12(iAlt,iSpecies) = &
+!          LiouKpS(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
+!          (  (PressureSRight_P12(iAlt, iSpecies) - &
+!          HydroPressureSRight_P12(iAlt,iSpecies) ) - &
+!          (PressureSLeft_P12(iAlt, iSpecies) - &
+!          HydroPressureSLeft_P12(iAlt,iSpecies) ) )/ &
+!          ( MeanRhoS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+!          (FA_P12(iAlt,iSpecies)*MeanCS_P12(iAlt) + &
+!           ModifiedZeta(iAlt,iSpecies)*dAlt_C(iAlt)/DtIn)  ) 
+!
+!!!!!! Non-Hydrostatic Species Should use this version
+!
+!       if (.not. SubtractHydrostatic(iAlt,iSpecies)) then
+!
+!       MPress_P12(iAlt,iSpecies) = &
+!          LiouKpS(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
+!          (PressureSRight_P12(iAlt, iSpecies) - PressureSLeft_P12(iAlt,iSpecies) )/&
+!          ( MeanRhoS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+!          (FA_P12(iAlt,iSpecies)*MeanCS_P12(iAlt) + &
+!          ModifiedZeta(iAlt,iSpecies)*dAlt_C(iAlt)/DtIn)  ) 
+!
+!       MPress_M12(iAlt,iSpecies) = &
+!         LiouKpS(iAlt,iSpecies)*max( (1.0 - M2Bar_M12(iAlt,iSpecies)), 0.0)*&
+!         (PressureSRight_M12(iAlt, iSpecies) - PressureSLeft_M12(iAlt,iSpecies) )/&
+!         ( MeanRhoS_M12(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
+!         (FA_M12(iAlt,iSpecies)*MeanCS_M12(iAlt) + &
+!          ModifiedZeta(iAlt,iSpecies)*dAlt_C(iAlt)/DtIn)  ) 
+!
+!
+!        endif 
+!     enddo ! iSpecies
+!   enddo ! iAlt
 
-       ModifiedZeta(iAlt,iSpecies) = 1.0
+!!! Begin 2nd Order Mach Number Polynomials
+   do iSpecies = 1, nSpecies
+     do iAlt = 1, nAlts 
+ 
+        ModifiedZeta(iAlt,iSpecies) = 1.0
+ !!!! Hydrostatic Species Use This one
+        MPress_M12(iAlt,iSpecies) = &
+          LiouKpS_M12(iAlt,iSpecies)*max( (1.0 - M2Bar_M12(iAlt,iSpecies)), 0.0)*&
+          ((PressureSRight_M12(iAlt, iSpecies) - &
+          HydroPressureSRight_M12(iAlt,iSpecies) ) - &
+          (PressureSLeft_M12(iAlt, iSpecies) - &
+           HydroPressureSLeft_M12(iAlt,iSpecies) ) )/ &
+          ( MeanRhoS_M12(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
+          (FA_M12(iAlt,iSpecies)*MeanCS_M12(iAlt) + &
+           ModifiedZeta(iAlt,iSpecies)*dAlt_F(iAlt)/DtIn)  ) 
+ 
+        MPress_P12(iAlt,iSpecies) = &
+           LiouKpS_P12(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
+           (  (PressureSRight_P12(iAlt, iSpecies) - &
+           HydroPressureSRight_P12(iAlt,iSpecies) ) - &
+           (PressureSLeft_P12(iAlt, iSpecies) - &
+           HydroPressureSLeft_P12(iAlt,iSpecies) ) )/ &
+           ( MeanRhoS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+           (FA_P12(iAlt,iSpecies)*MeanCS_P12(iAlt) + &
+            ModifiedZeta(iAlt,iSpecies)*dAlt_F(iAlt+1)/DtIn)  ) 
+ 
+ !!!! Non-Hydrostatic Species Should use this version
+ 
+        if (SubtractHydrostatic(iAlt,iSpecies) .eq. .false.) then
+ 
+        MPress_P12(iAlt,iSpecies) = &
+           LiouKpS_P12(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
+           (PressureSRight_P12(iAlt, iSpecies) - PressureSLeft_P12(iAlt,iSpecies) )/&
+           ( MeanRhoS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+           (FA_P12(iAlt,iSpecies)*MeanCS_P12(iAlt) + &
+           ModifiedZeta(iAlt,iSpecies)*dAlt_F(iAlt+1)/DtIn)  ) 
+ 
+        MPress_M12(iAlt,iSpecies) = &
+          LiouKpS_M12(iAlt,iSpecies)*max( (1.0 - M2Bar_M12(iAlt,iSpecies)), 0.0)*&
+          (PressureSRight_M12(iAlt, iSpecies) - PressureSLeft_M12(iAlt,iSpecies) )/&
+          ( MeanRhoS_M12(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
+          (FA_M12(iAlt,iSpecies)*MeanCS_M12(iAlt) + &
+           ModifiedZeta(iAlt,iSpecies)*dAlt_F(iAlt)/DtIn)  ) 
+ 
+         endif 
+      enddo ! iSpecies
+    enddo ! iAlt
 
-!!!! Hydrostatic Species Use This one
-       MPress_M12(iAlt,iSpecies) = &
-         LiouKpS(iAlt,iSpecies)*max( (1.0 - M2Bar_M12(iAlt,iSpecies)), 0.0)*&
-         ((PressureSRight_M12(iAlt, iSpecies) - &
-         HydroPressureSRight_M12(iAlt,iSpecies) ) - &
-         (PressureSLeft_M12(iAlt, iSpecies) - &
-          HydroPressureSLeft_M12(iAlt,iSpecies) ) )/ &
-         ( MeanRhoS_M12(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
-         (FA_M12(iAlt,iSpecies)*MeanCS_M12(iAlt) + &
-          ModifiedZeta(iAlt,iSpecies)*dAlt_C(iAlt)/DtIn)  ) 
-
-       MPress_P12(iAlt,iSpecies) = &
-          LiouKpS(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
-          (  (PressureSRight_P12(iAlt, iSpecies) - &
-          HydroPressureSRight_P12(iAlt,iSpecies) ) - &
-          (PressureSLeft_P12(iAlt, iSpecies) - &
-          HydroPressureSLeft_P12(iAlt,iSpecies) ) )/ &
-          ( MeanRhoS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
-          (FA_P12(iAlt,iSpecies)*MeanCS_P12(iAlt) + &
-           ModifiedZeta(iAlt,iSpecies)*dAlt_C(iAlt)/DtIn)  ) 
-
-!!!!! Non-Hydrostatic Species Should use this version
-
-       if (.not. SubtractHydrostatic(iAlt,iSpecies)) then
-
-       MPress_P12(iAlt,iSpecies) = &
-          LiouKpS(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
-          (PressureSRight_P12(iAlt, iSpecies) - PressureSLeft_P12(iAlt,iSpecies) )/&
-          ( MeanRhoS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
-          (FA_P12(iAlt,iSpecies)*MeanCS_P12(iAlt) + &
-          ModifiedZeta(iAlt,iSpecies)*dAlt_C(iAlt)/DtIn)  ) 
-
-       MPress_M12(iAlt,iSpecies) = &
-         LiouKpS(iAlt,iSpecies)*max( (1.0 - M2Bar_M12(iAlt,iSpecies)), 0.0)*&
-         (PressureSRight_M12(iAlt, iSpecies) - PressureSLeft_M12(iAlt,iSpecies) )/&
-         ( MeanRhoS_M12(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
-         (FA_M12(iAlt,iSpecies)*MeanCS_M12(iAlt) + &
-          ModifiedZeta(iAlt,iSpecies)*dAlt_C(iAlt)/DtIn)  ) 
-
-
-        endif 
-     enddo ! iSpecies
-   enddo ! iAlt
 
 
    do iAlt = 1, nAlts 
@@ -1888,20 +2036,58 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
 
 !! NUMERICAL PRESSURE
+!  do iSpecies = 1, nSpecies
+!       do iAlt = 1, nAlts
+!
+!             NumericalPressure_P12(iAlt,iSpecies) = &
+!                  (MeanPressureS_P12(iAlt,iSpecies) - &
+!              MeanHydroPressureS_P12(iAlt,iSpecies) )&
+!                - 0.5*Ku(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+!               ( (RhoSRight_P12(iAlt,iSpecies) )*VelRight_P12(iAlt,iSpecies) - &
+!                  (RhoSLeft_P12(iAlt,iSpecies) )* VelLeft_P12(iAlt,iSpecies) )
+!
+!             NumericalPressure_M12(iAlt,iSpecies) = &
+!               (MeanPressureS_M12(iAlt,iSpecies) - &
+!           MeanHydroPressureS_M12(iAlt,iSpecies) )&
+!                - 0.5*Ku(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
+!               ( (RhoSRight_M12(iAlt,iSpecies) )*VelRight_M12(iAlt,iSpecies) - &
+!                  (RhoSLeft_M12(iAlt,iSpecies) )* VelLeft_M12(iAlt,iSpecies) )
+!
+!      
+!       if (.not. SubtractHydrostatic(iAlt,iSpecies)) then
+!
+!             NumericalPressure_P12(iAlt,iSpecies) = &
+!               (MeanPressureS_P12(iAlt,iSpecies) )&
+!                - 0.5*Ku(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+!               ( (RhoSRight_P12(iAlt,iSpecies) )*VelRight_P12(iAlt,iSpecies) - &
+!                  (RhoSLeft_P12(iAlt,iSpecies) )* VelLeft_P12(iAlt,iSpecies) )
+!
+!             NumericalPressure_M12(iAlt,iSpecies) = &
+!               (MeanPressureS_M12(iAlt,iSpecies) )&
+!                - 0.5*Ku(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
+!               ( (RhoSRight_M12(iAlt,iSpecies) )*VelRight_M12(iAlt,iSpecies) - &
+!                  (RhoSLeft_M12(iAlt,iSpecies) )* VelLeft_M12(iAlt,iSpecies) )
+!
+!       endif 
+!           
+!       enddo !!iAlt = 1, nAlts
+!  enddo !!! nSpecies
+
+!! NUMERICAL PRESSURE
   do iSpecies = 1, nSpecies
        do iAlt = 1, nAlts
 
              NumericalPressure_P12(iAlt,iSpecies) = &
                   (MeanPressureS_P12(iAlt,iSpecies) - &
               MeanHydroPressureS_P12(iAlt,iSpecies) )&
-                - 0.5*Ku(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+                - 0.5*LiouKuS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
                ( (RhoSRight_P12(iAlt,iSpecies) )*VelRight_P12(iAlt,iSpecies) - &
                   (RhoSLeft_P12(iAlt,iSpecies) )* VelLeft_P12(iAlt,iSpecies) )
 
              NumericalPressure_M12(iAlt,iSpecies) = &
                (MeanPressureS_M12(iAlt,iSpecies) - &
            MeanHydroPressureS_M12(iAlt,iSpecies) )&
-                - 0.5*Ku(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
+                - 0.5*LiouKuS_M12(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
                ( (RhoSRight_M12(iAlt,iSpecies) )*VelRight_M12(iAlt,iSpecies) - &
                   (RhoSLeft_M12(iAlt,iSpecies) )* VelLeft_M12(iAlt,iSpecies) )
 
@@ -1910,13 +2096,13 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
              NumericalPressure_P12(iAlt,iSpecies) = &
                (MeanPressureS_P12(iAlt,iSpecies) )&
-                - 0.5*Ku(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+                - 0.5*LiouKuS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
                ( (RhoSRight_P12(iAlt,iSpecies) )*VelRight_P12(iAlt,iSpecies) - &
                   (RhoSLeft_P12(iAlt,iSpecies) )* VelLeft_P12(iAlt,iSpecies) )
 
              NumericalPressure_M12(iAlt,iSpecies) = &
                (MeanPressureS_M12(iAlt,iSpecies) )&
-                - 0.5*Ku(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
+                - 0.5*LiouKuS_M12(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
                ( (RhoSRight_M12(iAlt,iSpecies) )*VelRight_M12(iAlt,iSpecies) - &
                   (RhoSLeft_M12(iAlt,iSpecies) )* VelLeft_M12(iAlt,iSpecies) )
 
@@ -1924,6 +2110,7 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
            
        enddo !!iAlt = 1, nAlts
   enddo !!! nSpecies
+
 
 
   do iSpecies = 1, nSpecies
@@ -2065,7 +2252,7 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 end subroutine calc_all_fluxes_hydro
 
 
- subroutine calc_kt_facevalues(Var, VarLeft_M12, VarRight_M12, &
+ subroutine calc_kt_facevalues_tvd(Var, VarLeft_M12, VarRight_M12, &
                                     VarLeft_P12, VarRight_P12)
  
  
@@ -2109,6 +2296,363 @@ end subroutine calc_all_fluxes_hydro
 !           VarRight_P12(i) = Var(i+1) - 0.5*dVarLimited(i+1) * dAlt_F(i+1)
 !        end do
 
+ end subroutine calc_kt_facevalues_tvd
+
+
+ subroutine calc_kt_facevalues(Var, VarLeft_M12, VarRight_M12, &
+                                    VarLeft_P12, VarRight_P12)
+ 
+   use ModVertical, only: &
+       dAlt_F, dAlt_C, InvDAlt_F, Altitude_G, &
+       Mesh_ULP120, Mesh_ULP121, Mesh_ULP122, &
+       Mesh_CLP120, Mesh_CLP121, Mesh_CLP122, &
+       Mesh_URM120, Mesh_URM121, Mesh_URM122, &
+       Mesh_CRM120, Mesh_CRM121, Mesh_CRM122, &
+       UB_MeshCoefs, LB_MeshCoefs, &
+       Mesh_IS0, Mesh_IS1, Mesh_IS2
+     
+   use ModSizeGITM, only: nAlts
+   use ModLimiterGitm
+ 
+   implicit none
+   
+   real, intent(in) :: Var(-1:nAlts+2)
+   real, intent(out):: VarLeft_P12(1:nAlts), VarRight_P12(1:nAlts)
+   real, intent(out):: VarLeft_M12(1:nAlts), VarRight_M12(1:nAlts)
+ 
+   real :: dVarUp, dVarDown, dVarLimited(0:nAlts+1)
+   real :: rp, rn, rp2, rn2
+   real :: Rn3, Rp3, R
+   real :: Meshkm2, Meshkm1, Meshk, Meshkp1, Meshkp2
+
+   real :: UL_P120, UL_P121, UL_P122
+   real :: UR_M120, UR_M121, UR_M122
+   real :: CL_P120, CL_P121, CL_P122
+   real :: CR_M120, CR_M121, CR_M122
+   real :: X_P12, X_P32, X_P52
+   real :: X_M12, X_M32, X_M52
+   real :: IS0, IS1, IS2
+   real :: IS0Z, IS1Z, IS2Z
+   real :: TRis
+   real :: Alpha_P0, Alpha_P1, Alpha_P2
+   real :: Alpha_M0, Alpha_M1, Alpha_M2
+   real :: W_P0, W_P1, W_P2
+   real :: W_M0, W_M1, W_M2
+   integer :: i, k,iAlt
+   real :: RISk
+   real :: WENOEpsilon
+   !------------ USE THESE FOR THE FAST VERSION --------------
+   real :: C_P120, C_P121, C_P122
+   real :: C_M120, C_M121, C_M122
+   real :: U_P12, U_M12
+   real :: U_P32, U_M32
+   real :: U_BarP12, U_BarM12
+   real :: U_BarP32, U_BarM32
+   real :: QL_P120, QL_P121, QL_P122
+   real :: QR_M120, QR_M121, QR_M122
+   real :: hi, hip1
+   real :: Alpha_M12, Alpha_M32, Alpha_P12, Alpha_P32
+   !-------
+   real :: DenominatorL, DenominatorR
+
+!!! Use for 4-th Order Forward Differences
+!!! Need a 5-point Stencil
+  real :: h1, h2, h3, h4
+  real :: MeshH1, MeshH2, MeshH3, MeshH4
+  real :: MeshCoef0, MeshCoef1, &
+          MeshCoef2, MeshCoef3, &
+          MeshCoef4
+
+!!! Use for 4-th Order Backward Differences
+!!! Need a 5-point Stencil
+  real :: hm1, hm2, hm3, hm4
+  real :: MeshHm1, MeshHm2, MeshHm3, MeshHm4
+  real :: MeshCoefm0, MeshCoefm1, &
+          MeshCoefm2, MeshCoefm3, &
+          MeshCoefm4
+  real :: dVar
+  real :: LocalVar(-2:nAlts+3)  ! Need this for extrapolation
+  real :: LocalVarLeft(0:nAlts), LocalVarRight(0:nAlts)
+  real :: LocalVarLeft_M12(1:nAlts), LocalVarRight_M12(1:nAlts)
+  real :: LocalVarLeft_P12(1:nAlts), LocalVarRight_P12(1:nAlts)
+  real :: Alt_M2, Alt_M3
+  real :: Alt_P2, Alt_P3
+  ! WENOZ  - Factors
+  real :: Tau5Z
+
+
+  LocalVar(-1:nAlts+2) = Var(-1:nAlts+2)
+   ! Use WENO Reconstruction
+   !WENOEpsilon = 1.0e-6
+   WENOEpsilon = 1.0e-2
+   do iAlt=1,nAlts  
+      UL_P120 = &
+        Mesh_ULP120(iAlt,1)*   & 
+                LocalVar(iAlt+1)  + &
+        Mesh_ULP120(iAlt,2)*   &
+                (LocalVar(iAlt) - LocalVar(iAlt+1)) - &
+        Mesh_ULP120(iAlt,3)*   &
+                (LocalVar(iAlt+2) - LocalVar(iAlt+1))
+!          
+      UL_P121 = &
+        Mesh_ULP121(iAlt,1)*   & 
+                   LocalVar(iAlt  ) + &
+        Mesh_ULP121(iAlt,2)*   &
+               (LocalVar(iAlt+1) - LocalVar(iAlt  )) - &
+        Mesh_ULP121(iAlt,3)*   &
+                (LocalVar(iAlt-1) - LocalVar(iAlt  )) 
+
+      UL_P122 = &
+        Mesh_ULP122(iAlt,1)*   & 
+                   LocalVar(iAlt-1) + &
+        Mesh_ULP122(iAlt,2)*   &
+               (LocalVar(iAlt-2) - LocalVar(iAlt-1)) + &
+        Mesh_ULP122(iAlt,3)*   &
+               (LocalVar(iAlt  ) - LocalVar(iAlt-1)) 
+       
+      UR_M120 = &
+        Mesh_URM120(iAlt,1)*   & 
+                   LocalVar(iAlt+1) + &
+        Mesh_URM120(iAlt,2)*   &
+                (LocalVar(iAlt  ) - LocalVar(iAlt+1)) + & 
+        Mesh_URM120(iAlt,3)*   &
+                (LocalVar(iAlt+2) - LocalVar(iAlt+1)) 
+
+      UR_M121 = &
+        Mesh_URM121(iAlt,1)*   & 
+                   LocalVar(iAlt  ) + &
+        Mesh_URM121(iAlt,2)*   &
+                  (LocalVar(iAlt-1) - LocalVar(iAlt  )) - &
+        Mesh_URM121(iAlt,3)*   &
+                  (LocalVar(iAlt+1) - LocalVar(iAlt  )) 
+       
+      UR_M122 = &
+        Mesh_URM122(iAlt,1)*   & 
+                   LocalVar(iAlt-1) + &
+        Mesh_URM122(iAlt,2)*   &
+                  (LocalVar(iAlt) - LocalVar(iAlt-1)) - &
+        Mesh_URM122(iAlt,3)*   &
+                  (LocalVar(iAlt-2) - LocalVar(iAlt-1)) 
+
+      CL_P120 = Mesh_CLP120(iAlt)
+      CL_P121 = Mesh_CLP121(iAlt)
+      CL_P122 = Mesh_CLP122(iAlt)
+
+      CR_M120 = Mesh_CRM120(iAlt)
+      CR_M121 = Mesh_CRM121(iAlt)
+      CR_M122 = Mesh_CRM122(iAlt)
+
+      IS0 = Mesh_IS0(iAlt,1)*&
+            (LocalVar(iAlt+2) - LocalVar(iAlt+1))**2.0 + &
+            Mesh_IS0(iAlt,2)*&
+            ((LocalVar(iAlt+2) - LocalVar(iAlt+1))*(LocalVar(iAlt) - LocalVar(iAlt+1))) + &
+            Mesh_IS0(iAlt,3)*&
+            ((LocalVar(iAlt  ) - LocalVar(iAlt+1))**2.0)
+            
+      IS1 = Mesh_IS1(iAlt,1)*&
+            (LocalVar(iAlt-1) - LocalVar(iAlt  ))**2.0 + &
+            Mesh_IS1(iAlt,2)*&
+            ((LocalVar(iAlt+1) - LocalVar(iAlt  ))*(LocalVar(iAlt-1) - LocalVar(iAlt))) + &
+            Mesh_IS1(iAlt,3)*&
+            ((LocalVar(iAlt+1) - LocalVar(iAlt  ))**2.0)
+
+      IS2 = Mesh_IS2(iAlt,1)*&
+            (LocalVar(iAlt-2) - LocalVar(iAlt-1))**2.0 + &
+            Mesh_IS2(iAlt,2)*&
+            ((LocalVar(iAlt  ) - LocalVar(iAlt-1))*(LocalVar(iAlt-2) - LocalVar(iAlt-1))) + &
+            Mesh_IS2(iAlt,3)*&
+            ((LocalVar(iAlt  ) - LocalVar(iAlt-1))**2.0)
+
+      Tau5Z = abs(IS0 - IS2)
+
+      Alpha_P0 = CL_P120*(1.0 + (Tau5Z/(IS0  + WENOEpsilon))**2.0)
+      Alpha_P1 = CL_P121*(1.0 + (Tau5Z/(IS1  + WENOEpsilon))**2.0)
+      Alpha_P2 = CL_P122*(1.0 + (Tau5Z/(IS2  + WENOEpsilon))**2.0)
+
+      Alpha_M0 = CR_M120*(1.0 + (Tau5Z/(IS0  + WENOEpsilon))**2.0)
+      Alpha_M1 = CR_M121*(1.0 + (Tau5Z/(IS1  + WENOEpsilon))**2.0)
+      Alpha_M2 = CR_M122*(1.0 + (Tau5Z/(IS2  + WENOEpsilon))**2.0)
+
+      DenominatorL = Alpha_P0 + Alpha_P1 + Alpha_P2
+      DenominatorR = Alpha_M0 + Alpha_M1 + Alpha_M2
+
+      W_P0 = Alpha_P0/DenominatorL
+      W_P1 = Alpha_P1/DenominatorL
+      W_P2 = Alpha_P2/DenominatorL
+
+      W_M0 = Alpha_M0/DenominatorR
+      W_M1 = Alpha_M1/DenominatorR
+      W_M2 = Alpha_M2/DenominatorR
+
+       LocalVarLeft_P12(iAlt  ) = W_P0*UL_P120 + W_P1*UL_P121 + W_P2*UL_P122
+      LocalVarRight_M12(iAlt  ) = W_M0*UR_M120 + W_M1*UR_M121 + W_M2*UR_M122
+   enddo !i=1,nAlts
+
+   do iAlt = 2, nAlts
+      LocalVarLeft_M12(iAlt) = LocalVarLeft_P12(iAlt-1)
+   enddo !iAlt = 1, nAlts
+   do iAlt = 1, nAlts-1
+      LocalVarRight_P12(iAlt) = LocalVarRight_M12(iAlt+1)
+   enddo !iAlt = 1, nAlts
+
+   iAlt = -2
+   dVar  = LB_MeshCoefs(1,1)*Var(iAlt+1) + &  
+           LB_MeshCoefs(1,2)*Var(iAlt+2) + &  
+           LB_MeshCoefs(1,3)*Var(iAlt+3) + &  
+           LB_MeshCoefs(1,4)*Var(iAlt+4) + &  
+           LB_MeshCoefs(1,5)*Var(iAlt+5)      
+   LocalVar(iAlt) = Var(iAlt+1) - dAlt_F(iAlt+1)*dVar 
+
+
+   iAlt = nAlts + 3
+   dVar  = UB_MeshCoefs(3,1)*Var(iAlt-1) + &  
+           UB_MeshCoefs(3,2)*Var(iAlt-2) + &  
+           UB_MeshCoefs(3,3)*Var(iAlt-3) + &  
+           UB_MeshCoefs(3,4)*Var(iAlt-4) + &  
+           UB_MeshCoefs(3,5)*Var(iAlt-5)      
+   LocalVar(iAlt) = LocalVar(iAlt-1) + dVar*dAlt_F(iAlt-1)
+
+
+   ! Now, the extra ghost cells (-2, and nAlts + 3) are filled, so we can use
+   ! The WENOZ-RL(5) for the VarLeft(0), VarRight(nAlts)
+   iAlt = 0
+   UL_P120 = &
+        Mesh_ULP120(iAlt,1)*   & 
+                LocalVar(iAlt+1)  + &
+        Mesh_ULP120(iAlt,2)*   &
+                (LocalVar(iAlt) - LocalVar(iAlt+1)) - &
+        Mesh_ULP120(iAlt,3)*   &
+                (LocalVar(iAlt+2) - LocalVar(iAlt+1))
+!          
+   UL_P121 = &
+        Mesh_ULP121(iAlt,1)*   & 
+                   LocalVar(iAlt  ) + &
+        Mesh_ULP121(iAlt,2)*   &
+               (LocalVar(iAlt+1) - LocalVar(iAlt  )) - &
+        Mesh_ULP121(iAlt,3)*   &
+                (LocalVar(iAlt-1) - LocalVar(iAlt  )) 
+
+   UL_P122 = &
+        Mesh_ULP122(iAlt,1)*   & 
+                   LocalVar(iAlt-1) + &
+        Mesh_ULP122(iAlt,2)*   &
+               (LocalVar(iAlt-2) - LocalVar(iAlt-1)) + &
+        Mesh_ULP122(iAlt,3)*   &
+               (LocalVar(iAlt  ) - LocalVar(iAlt-1)) 
+       
+   CL_P120 = Mesh_CLP120(iAlt)
+   CL_P121 = Mesh_CLP121(iAlt)
+   CL_P122 = Mesh_CLP122(iAlt)
+
+   IS0 = Mesh_IS0(iAlt,1)*&
+         (LocalVar(iAlt+2) - LocalVar(iAlt+1))**2.0 + &
+         Mesh_IS0(iAlt,2)*&
+         ((LocalVar(iAlt+2) - LocalVar(iAlt+1))*(LocalVar(iAlt) - LocalVar(iAlt+1))) + &
+         Mesh_IS0(iAlt,3)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt+1))**2.0)
+            
+   IS1 = Mesh_IS1(iAlt,1)*&
+         (LocalVar(iAlt-1) - LocalVar(iAlt  ))**2.0 + &
+         Mesh_IS1(iAlt,2)*&
+         ((LocalVar(iAlt+1) - LocalVar(iAlt  ))*(LocalVar(iAlt-1) - LocalVar(iAlt))) + &
+         Mesh_IS1(iAlt,3)*&
+         ((LocalVar(iAlt+1) - LocalVar(iAlt  ))**2.0)
+
+   IS2 = Mesh_IS2(iAlt,1)*&
+         (LocalVar(iAlt-2) - LocalVar(iAlt-1))**2.0 + &
+         Mesh_IS2(iAlt,2)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt-1))*(LocalVar(iAlt-2) - LocalVar(iAlt-1))) + &
+         Mesh_IS2(iAlt,3)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt-1))**2.0)
+
+   Tau5Z = abs(IS0 - IS2)
+
+   Alpha_P0 = CL_P120*(1.0 + (Tau5Z/(IS0  + WENOEpsilon))**2.0)
+   Alpha_P1 = CL_P121*(1.0 + (Tau5Z/(IS1  + WENOEpsilon))**2.0)
+   Alpha_P2 = CL_P122*(1.0 + (Tau5Z/(IS2  + WENOEpsilon))**2.0)
+
+   DenominatorL = Alpha_P0 + Alpha_P1 + Alpha_P2
+
+   W_P0 = Alpha_P0/DenominatorL
+   W_P1 = Alpha_P1/DenominatorL
+   W_P2 = Alpha_P2/DenominatorL
+
+   LocalVarLeft_M12(iAlt+1) = W_P0*UL_P120 + W_P1*UL_P121 + W_P2*UL_P122
+
+
+   iAlt = nAlts+1
+   UR_M120 = &
+     Mesh_URM120(iAlt,1)*   & 
+                LocalVar(iAlt+1) + &
+     Mesh_URM120(iAlt,2)*   &
+             (LocalVar(iAlt  ) - LocalVar(iAlt+1)) + & 
+     Mesh_URM120(iAlt,3)*   &
+             (LocalVar(iAlt+2) - LocalVar(iAlt+1)) 
+
+   UR_M121 = &
+     Mesh_URM121(iAlt,1)*   & 
+                LocalVar(iAlt  ) + &
+     Mesh_URM121(iAlt,2)*   &
+               (LocalVar(iAlt-1) - LocalVar(iAlt  )) - &
+     Mesh_URM121(iAlt,3)*   &
+               (LocalVar(iAlt+1) - LocalVar(iAlt  )) 
+       
+   UR_M122 = &
+     Mesh_URM122(iAlt,1)*   & 
+                LocalVar(iAlt-1) + &
+     Mesh_URM122(iAlt,2)*   &
+               (LocalVar(iAlt) - LocalVar(iAlt-1)) - &
+     Mesh_URM122(iAlt,3)*   &
+               (LocalVar(iAlt-2) - LocalVar(iAlt-1)) 
+
+   CR_M120 = Mesh_CRM120(iAlt)
+   CR_M121 = Mesh_CRM121(iAlt)
+   CR_M122 = Mesh_CRM122(iAlt)
+
+   IS0 = Mesh_IS0(iAlt,1)*&
+         (LocalVar(iAlt+2) - LocalVar(iAlt+1))**2.0 + &
+         Mesh_IS0(iAlt,2)*&
+         ((LocalVar(iAlt+2) - LocalVar(iAlt+1))*(LocalVar(iAlt) - LocalVar(iAlt+1))) + &
+         Mesh_IS0(iAlt,3)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt+1))**2.0)
+            
+   IS1 = Mesh_IS1(iAlt,1)*&
+         (LocalVar(iAlt-1) - LocalVar(iAlt  ))**2.0 + &
+         Mesh_IS1(iAlt,2)*&
+         ((LocalVar(iAlt+1) - LocalVar(iAlt  ))*(LocalVar(iAlt-1) - LocalVar(iAlt))) + &
+         Mesh_IS1(iAlt,3)*&
+         ((LocalVar(iAlt+1) - LocalVar(iAlt  ))**2.0)
+
+   IS2 = Mesh_IS2(iAlt,1)*&
+         (LocalVar(iAlt-2) - LocalVar(iAlt-1))**2.0 + &
+         Mesh_IS2(iAlt,2)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt-1))*(LocalVar(iAlt-2) - LocalVar(iAlt-1))) + &
+         Mesh_IS2(iAlt,3)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt-1))**2.0)
+
+   Tau5Z = abs(IS0 - IS2)
+
+   Alpha_M0 = CR_M120*(1.0 + (Tau5Z/(IS0  + WENOEpsilon))**2.0)
+   Alpha_M1 = CR_M121*(1.0 + (Tau5Z/(IS1  + WENOEpsilon))**2.0)
+   Alpha_M2 = CR_M122*(1.0 + (Tau5Z/(IS2  + WENOEpsilon))**2.0)
+
+   DenominatorR = Alpha_M0 + Alpha_M1 + Alpha_M2
+
+   W_M0 = Alpha_M0/DenominatorR
+   W_M1 = Alpha_M1/DenominatorR
+   W_M2 = Alpha_M2/DenominatorR
+
+   LocalVarRight_P12(iAlt-1) = W_M0*UR_M120 + W_M1*UR_M121 + W_M2*UR_M122
+
+   do iAlt = 1, nAlts
+       VarLeft_P12(iAlt) = LocalVarLeft_P12(iAlt)
+      VarRight_P12(iAlt) = LocalVarRight_P12(iAlt)
+
+       VarLeft_M12(iAlt) =  LocalVarLeft_M12(iAlt)
+      VarRight_M12(iAlt) = LocalVarRight_M12(iAlt)
+   enddo 
+
  end subroutine calc_kt_facevalues
+
 
 
