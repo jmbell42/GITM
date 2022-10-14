@@ -1355,8 +1355,8 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   ! The Original Settings
   MinKuS(1:nAlts,1:nSpecies) = 2.00
   MaxKuS(1:nAlts,1:nSpecies) = 3.00
-  MinKpS(1:nAlts,1:nSpecies) = 1.0e-04
-  MaxKpS(1:nAlts,1:nSpecies) = 0.25
+  MinKpS(1:nAlts,1:nSpecies) = 1.0e-19
+  MaxKpS(1:nAlts,1:nSpecies) = 1.0e-09
 
 
   !!KpWidth = 100.0e+03
@@ -2321,9 +2321,6 @@ end subroutine calc_all_fluxes_hydro
    real, intent(out):: VarLeft_M12(1:nAlts), VarRight_M12(1:nAlts)
  
    real :: dVarUp, dVarDown, dVarLimited(0:nAlts+1)
-   real :: rp, rn, rp2, rn2
-   real :: Rn3, Rp3, R
-   real :: Meshkm2, Meshkm1, Meshk, Meshkp1, Meshkp2
 
    real :: UL_P120, UL_P121, UL_P122
    real :: UR_M120, UR_M121, UR_M122
@@ -2355,21 +2352,6 @@ end subroutine calc_all_fluxes_hydro
    !-------
    real :: DenominatorL, DenominatorR
 
-!!! Use for 4-th Order Forward Differences
-!!! Need a 5-point Stencil
-  real :: h1, h2, h3, h4
-  real :: MeshH1, MeshH2, MeshH3, MeshH4
-  real :: MeshCoef0, MeshCoef1, &
-          MeshCoef2, MeshCoef3, &
-          MeshCoef4
-
-!!! Use for 4-th Order Backward Differences
-!!! Need a 5-point Stencil
-  real :: hm1, hm2, hm3, hm4
-  real :: MeshHm1, MeshHm2, MeshHm3, MeshHm4
-  real :: MeshCoefm0, MeshCoefm1, &
-          MeshCoefm2, MeshCoefm3, &
-          MeshCoefm4
   real :: dVar
   real :: LocalVar(-2:nAlts+3)  ! Need this for extrapolation
   real :: LocalVarLeft(0:nAlts), LocalVarRight(0:nAlts)
@@ -2383,8 +2365,7 @@ end subroutine calc_all_fluxes_hydro
 
   LocalVar(-1:nAlts+2) = Var(-1:nAlts+2)
    ! Use WENO Reconstruction
-   !WENOEpsilon = 1.0e-6
-   WENOEpsilon = 1.0e-2
+   WENOEpsilon = 1.0e-6
    do iAlt=1,nAlts  
       UL_P120 = &
         Mesh_ULP120(iAlt,1)*   & 
