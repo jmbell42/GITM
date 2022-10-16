@@ -1275,31 +1275,8 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   real :: LogKpS(1:nAlts,1:nSpecies), LogKuS(1:nAlts,1:nSpecies)
   real :: LogMinKpS(1:nAlts,1:nSpecies), LogMinKuS(1:nAlts,1:nSpecies)
   real :: LogMaxKpS(1:nAlts,1:nSpecies), LogMaxKuS(1:nAlts,1:nSpecies)
-
-!  write(*,*) 'Key Variables =================='
-!  do iAlt = -1, nAlts + 2
-!       write(*,*) 'iAlt, RadialDist, Gamma_1d =', iAlt, &
-!             RadDist(iAlt), Gamma_1d(iAlt)
-!  enddo 
-
-!  do iSpecies = 1, nSpecies
-!     write(*,*) 'SPECIES ==================', cSpecies(iSpecies)
-!     do iAlt = -1, nAlts + 2
-!          write(*,*) 'iAlt, Subtract Hydro =', iAlt, &
-!                SubtractHydrostatic(iAlt,iSpecies)
-!     enddo 
-!  enddo 
-!
-!  do iSpecies = 1, nSpecies
-!     write(*,*) 'SPECIES ==================', cSpecies(iSpecies)
-!     do iAlt = -1, nAlts + 2
-!          write(*,*) 'iAlt, RhoS, VertVelS =', iAlt, &
-!                RhoS(iAlt,iSpecies), VertVel(iAlt,iSpecies)
-!     enddo 
-!  enddo 
-!
-!
-!stop
+! Thornber Correction
+  real :: ZVar, VL, VR, CBar, ML, MR
 
   MInf = 1.0e-19
   LiouBeta = 1.0/8.0
@@ -1642,9 +1619,35 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
       InterfaceCS_P12(iAlt) = min(LiouCSLeft_P12(iAlt), LiouCSRight_P12(iAlt))
 
 
-!      write(*,*) 'iAlt, InterfaceCS_M12(iAlt), InterfaceCS_P12(iAlt) =',&
-!                  iAlt, InterfaceCS_M12(iAlt), InterfaceCS_P12(iAlt)
    enddo 
+
+   do iSpecies = 1, nSpecies
+     do iAlt = 1, nAlts
+        ! Implement Thornber Entropy Correction at low Mach Numbers
+        ! see. Thornber et al. [2008], J. Comp. Phys, 227, 4873-4894
+        ! Implementation here taken from Houim et al. [2011], J Comp.Phys, 230, 8527-8553
+        CBar = InterfaceCS_P12(iAlt)
+          VL =     VelLeft_P12(iAlt,iSpecies)
+          VR =    VelRight_P12(iAlt,iSpecies)
+          ML = sqrt(VL*VL)/CBar
+          MR = sqrt(VR*VR)/CBar
+          ZVar = min(1.0, max(ML,MR))
+           VelLeft_P12(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VL - VR)
+          VelRight_P12(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VR - VL)
+
+        CBar = InterfaceCS_M12(iAlt)
+          VL =     VelLeft_M12(iAlt,iSpecies)
+          VR =    VelRight_M12(iAlt,iSpecies)
+          ML = sqrt(VL*VL)/CBar
+          MR = sqrt(VR*VR)/CBar
+          ZVar = min(1.0, max(ML,MR))
+           VelLeft_M12(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VL - VR)
+          VelRight_M12(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VR - VL)
+     enddo !iAlt = 1, nAlts
+   enddo !iSpecies = 1, nSpecies
+  
+
+
 
 
 !stop
