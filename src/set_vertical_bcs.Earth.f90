@@ -140,17 +140,8 @@ subroutine set_vertical_bcs(LogRho,LogNS,Vel_GD,Temp, LogINS, iVel, VertVel)
 
      enddo
   else
-     ! Don't Let the winds blow
-     Vel_GD(-1:0,iEast_)  = 0.0
-     Vel_GD(-1:0,iNorth_) = 0.0
-     ! The rest of the BCs will just stay constant.
-  endif
-
-  if (.not. DuringPerturb) then
-     Vel_GD(-1:0,iUp_)    = 0.0
-     VertVel(-1:0,:)      = 0.0
-  endif
-
+  endif ! Use MSIS BCs
+!
   if (UseGSWMTides) then
      Vel_GD(-1:0,iEast_)  = TidesEast(iLon1D,iLat1D,1:2,iBlock1D)
      Vel_GD(-1:0,iNorth_) = TidesNorth(iLon1D,iLat1D,1:2,iBlock1D)
@@ -161,242 +152,6 @@ subroutine set_vertical_bcs(LogRho,LogNS,Vel_GD,Temp, LogINS, iVel, VertVel)
      Vel_GD(-1:0,iNorth_) = TidesNorth(iLon1D,iLat1D,1:2,iBlock1D)
      Temp(-1:0)           = TidesTemp(iLon1D,iLat1D,1:2,iBlock1D)
   endif
-
-  ! In order to get a real hydrostatic solution at the bottom, we will
-  ! overwrite the -1 cell with our own calculation of the hydrostatic
-  ! solution, given the MSIS values in the 0th cell.
-  
-  ! Update the -1 Cell only for Temp, LogNS, and Vel_GD The 0 Cell is
-  ! set by MSIS or User-supplied Settings Need to Calculate 0ne-sided
-  ! first derivative at the Cell 0.
-
-  ! Calculate the non-uniform mesh coefficients
-  iAlt = -1
-  h1 = dAlt_F(iAlt+2) ! dAlt_F(1) = Alt(1) - Alt(0);  h1 in notes  
-  h2 = dAlt_F(iAlt+3) ! dAlt_F(2) = Alt(2) - Alt(1);  h2 in notes
-  h3 = dAlt_F(iAlt+4) ! dAlt_F(3) = Alt(3) - Alt(2);  h3 in notes
-  h4 = dAlt_F(iAlt+5) ! dAlt_F(4) = Alt(4) - Alt(3);  h4 in notes
-
-  ! Mesh Coefficients are summations over the individual mesh scales
-  MeshH1 = h1                 
-  MeshH2 = h1 + h2            
-  MeshH3 = h1 + h2 + h3
-  MeshH4 = h1 + h2 + h3 + h4
-
-  !!! 3rd Order Mesh Coef
-  MeshCoef0 = -1.0*( MeshH2*MeshH3*MeshH4 + MeshH1*MeshH3*MeshH4 + &
-                     MeshH1*MeshH2*MeshH4 + MeshH1*MeshH2*MeshH3)/&
-                   (MeshH1*MeshH2*MeshH3*MeshH4) 
-  MeshCoef1 =  1.0*( MeshH2*MeshH3*MeshH4)/(h1*h2*(h2 + h3)*(h2 + h3 + h4))
-  MeshCoef2 = -1.0*( MeshH1*MeshH3*MeshH4)/(MeshH2*h2*h3*(h3+h4))
-  MeshCoef3 =  1.0*( MeshH1*MeshH2*MeshH4)/(MeshH3*(h3+h2)*h3*h4)
-  MeshCoef4 = -1.0*( MeshH1*MeshH2*MeshH3)/(MeshH4*(h2+h3+h4)*(h3+h4)*h4)
-
-  ! For the MSIS BCS
-  iAlt = -1
-  Temp(iAlt) = Temp(iAlt+1)
-  do iDir = 1, 3
-     Vel_GD(iAlt  ,iDir) = Vel_GD(iAlt+1,iDir) 
-  enddo
-
-  do iSpecies = 1, nSpecies
-
-     if (.not. IsPhotoChemical(iSpecies)) then
-
-        ! This is what we do when (1) We're using MSIS and (2) the
-        ! species is NOT Photochemical
-
-        iAlt = -1
-        MeanGravity = -0.5*(EffectiveGravity(iAlt) + EffectiveGravity(iAlt+1))
-        MeanTemp = 0.5*(Temp(iAlt+1) + Temp(iAlt))
-        MeanMass = 0.5*(MeanMajorMass_1d(iAlt+1) + MeanMajorMass_1d(iAlt))
-        InvScaleHeightS =  &
-             MeanGravity * MeanMass / (MeanTemp*Boltzmanns_Constant)
-
-        ! Note the + in exponent, since we are going down in altitude.
-        NS(iAlt, iSpecies) = NS(iAlt+1, iSpecies) * &
-             (Temp(iAlt+1) / Temp(iAlt)) * &
-             exp(1.0*InvScaleHeightS*dAlt_F(iAlt)) 
-
-        LogNS(iAlt, iSpecies) = alog(NS(iAlt, iSpecies))
-
-        if (iSpecies == iO_3P_) then
-           ! Assume 0 gradient below boundary
-           LogNS(iAlt,iSpecies) = LogNS(0,iSpecies)
-        endif
-
-     else 
-
-        do iAlt = 0, -1, -1
-
-          h1 = dAlt_F(iAlt+2) ! dAlt_F(1) = Alt(1) - Alt(0);  h1 in notes  
-          h2 = dAlt_F(iAlt+3) ! dAlt_F(2) = Alt(2) - Alt(1);  h2 in notes
-          h3 = dAlt_F(iAlt+4) ! dAlt_F(3) = Alt(3) - Alt(2);  h3 in notes
-          h4 = dAlt_F(iAlt+5) ! dAlt_F(4) = Alt(4) - Alt(3);  h4 in notes
-
-          ! Mesh Coefficients are summations over the individual mesh scales
-          MeshH1 = h1                 
-          MeshH2 = h1 + h2            
-          MeshH3 = h1 + h2 + h3
-          MeshH4 = h1 + h2 + h3 + h4
-
-          !!! 3rd Order Mesh Coef
-          MeshCoef0 = -1.0*( MeshH2*MeshH3*MeshH4 + MeshH1*MeshH3*MeshH4 + &
-                             MeshH1*MeshH2*MeshH4 + MeshH1*MeshH2*MeshH3)/&
-                           (MeshH1*MeshH2*MeshH3*MeshH4) 
-          MeshCoef1 =  1.0*( MeshH2*MeshH3*MeshH4)/&
-                            (h1*h2*(h2 + h3)*(h2 + h3 + h4))
-          MeshCoef2 = -1.0*( MeshH1*MeshH3*MeshH4)/(MeshH2*h2*h3*(h3+h4))
-          MeshCoef3 =  1.0*( MeshH1*MeshH2*MeshH4)/(MeshH3*(h3+h2)*h3*h4)
-          MeshCoef4 = -1.0*( MeshH1*MeshH2*MeshH3)/&
-                            (MeshH4*(h2+h3+h4)*(h3+h4)*h4)
-
-          dLogNS = LogNS(iAlt+1,iSpecies)*MeshCoef0 + & 
-                   LogNS(iAlt+2,iSpecies)*MeshCoef1 + &
-                   LogNS(iAlt+3,iSpecies)*MeshCoef2 + &
-                   LogNS(iAlt+4,iSpecies)*MeshCoef3 + &
-                   LogNS(iAlt+5,iSpecies)*MeshCoef4
-
-          LogNS(iAlt, iSpecies) = &
-               LogNS(iAlt+1,iSpecies) - dAlt_F(iAlt+1) * dLogNS 
-
-          ! Limit the Gradients through the lower boundary
-          if (dLogNS .le. 0.0) then
-              LogNS(iAlt,iSpecies) = LogNS(iAlt+1,iSpecies)
-          endif 
-
-          ! Only allow the NO density to decrease by roughly 1/3 scale
-          ! height max
-          if (iSpecies == iNO_) then
-             if (LogNS(iAlt,iSpecies) < LogNS(iAlt+1,iSpecies) - 0.333) then
-                LogNS(iAlt,iSpecies) = LogNS(iAlt+1,iSpecies) - 0.333
-             endif
-          endif
-
-       enddo !iAlt = 0,-1,-1
-
-     endif ! PhotoChemical Check
-  enddo  ! iSpecies loop
-
-  do iAlt = 0, -1, -1
-
-    h1 = dAlt_F(iAlt+2) ! dAlt_F(1) = Alt(1) - Alt(0);  h1 in notes  
-    h2 = dAlt_F(iAlt+3) ! dAlt_F(2) = Alt(2) - Alt(1);  h2 in notes
-    h3 = dAlt_F(iAlt+4) ! dAlt_F(3) = Alt(3) - Alt(2);  h3 in notes
-    h4 = dAlt_F(iAlt+5) ! dAlt_F(4) = Alt(4) - Alt(3);  h4 in notes
-
-    ! Mesh Coefficients are summations over the individual mesh scales
-    MeshH1 = h1                 
-    MeshH2 = h1 + h2            
-    MeshH3 = h1 + h2 + h3
-    MeshH4 = h1 + h2 + h3 + h4
-
-    !!! 3rd Order Mesh Coef
-    MeshCoef0 = -1.0*( MeshH2*MeshH3*MeshH4 + MeshH1*MeshH3*MeshH4 + &
-                       MeshH1*MeshH2*MeshH4 + MeshH1*MeshH2*MeshH3)/&
-                     (MeshH1*MeshH2*MeshH3*MeshH4) 
-    MeshCoef1 =  1.0*( MeshH2*MeshH3*MeshH4)/(h1*h2*(h2 + h3)*(h2 + h3 + h4))
-    MeshCoef2 = -1.0*( MeshH1*MeshH3*MeshH4)/(MeshH2*h2*h3*(h3+h4))
-    MeshCoef3 =  1.0*( MeshH1*MeshH2*MeshH4)/(MeshH3*(h3+h2)*h3*h4)
-    MeshCoef4 = -1.0*( MeshH1*MeshH2*MeshH3)/(MeshH4*(h2+h3+h4)*(h3+h4)*h4)
-
-    ! -------------------------------------------------
-    ! Ions
-    ! -------------------------------------------------
-
-    ! Ions Float at the LBC
-    do iSpecies = 1, nIons-1
-
-       ! Simply assume no gradient, since this is a region in which
-       ! chemitry is dominant.  It shouldn't matter, really:
-       LogINS(iAlt,iSpecies) = LogINS(iAlt+1,iSpecies)
-
-    enddo ! Ions
-
-    ! Electon Density:
-    if (UseImprovedIonAdvection) then
-       LogINS(iAlt,nIons) = sum(LogINS(iAlt,1:nIons-1))
-    else
-       LogINS(iAlt,nIons) = alog(sum(exp(LogINS(iAlt,1:nIons-1))))
-    endif
-
-    ! Set the Ion Bulk Winds
-    do iDir = 1, 3
-       dVertVel = IVel(iAlt+1,iDir)*MeshCoef0 + & 
-                  IVel(iAlt+2,iDir)*MeshCoef1 + &
-                  IVel(iAlt+3,iDir)*MeshCoef2 + &
-                  IVel(iAlt+4,iDir)*MeshCoef3 + &
-                  IVel(iAlt+5,iDir)*MeshCoef4
-
-       IVel(iAlt  ,iDir) = IVel(iAlt+1,iDir) - dAlt_F(iAlt+1)*dVertVel 
-    enddo  ! iDir
-
-    ! -------------------------------------------------
-    ! Return to the neutrals, to deal with (vertical) winds now...
-    ! -------------------------------------------------
-    
-    do iSpecies = 1, nSpecies
-
-         dVertVel = VertVel(iAlt+1, iSpecies) * MeshCoef0 + & 
-                    VertVel(iAlt+2, iSpecies) * MeshCoef1 + &
-                    VertVel(iAlt+3, iSpecies) * MeshCoef2 + &
-                    VertVel(iAlt+4, iSpecies) * MeshCoef3 + &
-                    VertVel(iAlt+5, iSpecies) * MeshCoef4
-
-         VertVel(iAlt, iSpecies) = VertVel(iAlt+1,iSpecies) - &
-                                   dAlt_F(iAlt+1) * dVertVel 
-    enddo ! nSpecies
-
-    ! Update NS & LogRho to use in the vertical wind calculation:
-
-    NS(iAlt,1:nSpecies) = exp(LogNS(iAlt,1:nSpecies))
-    SumRho = 0.0     
-    do iSpecies = 1, nSpecies
-       SumRho  = SumRho  + Mass(iSpecies) * NS(iAlt, iSpecies)
-    enddo
-    LogRho(iAlt) = alog(SumRho)
-
-    ! Calculate the bulk vertical winds:
-    
-    Vel_GD(iAlt,iUp_) = 0.0
-    do iSpecies = 1, nSpecies
-       Vel_GD(iAlt,iUp_) = Vel_GD(iAlt,iUp_) + &
-            NS(iAlt,iSpecies) * Mass(iSpecies) * VertVel(iAlt,iSpecies) / &
-            exp(LogRho(iAlt))
-    enddo 
-
-    if ((iAlt == -1) .and. (UseMsisBcs)) then
-
-       do iDir = iEast_, iNorth_
-          dVertVel = Vel_GD(iAlt+1, iDir) * MeshCoef0 + & 
-                     Vel_GD(iAlt+2, iDir) * MeshCoef1 + &
-                     Vel_GD(iAlt+3, iDir) * MeshCoef2 + &
-                     Vel_GD(iAlt+4, iDir) * MeshCoef3 + &
-                     Vel_GD(iAlt+5, iDir) * MeshCoef4
-
-          Vel_GD(iAlt, iDir) = Vel_GD(iAlt+1, iDir) - dAlt_F(iAlt+1) * dVertVel 
-     enddo 
-
-    endif
-    
-  enddo ! End Outer IAlt Loop (0, -1, -1) 
-
-  ! Special Case for PhotoChemical Species
-  ! Allow O to flow upward
-  do iSpecies = 1, nSpecies
-
-     if ( (IsPhotoChemical(iSpecies)) .and. &
-          (VertVel(1, iSpecies) .gt. 0.0) .and. &
-          (iSpecies .ne. iO_3P_) ) then 
-
-        ! Do NOT allow photochemical species to flow upward!
-        ! The problem becomes unconstrained
-
-        VertVel( 0, iSpecies) = -1.0 * VertVel(1, iSpecies)
-        VertVel(-1, iSpecies) = -1.0 * VertVel(1, iSpecies)
-     endif  
-
-  enddo 
 
   ! For WP-GITM: add neutral atmospheric perturbations caused by
   ! tsunami or earthquake
@@ -413,6 +168,244 @@ subroutine set_vertical_bcs(LogRho,LogNS,Vel_GD,Temp, LogINS, iVel, VertVel)
      Vel_GD(-1:0, iEast_ : iUp_) = VelGD_LBC
   endif
 
+  ! If we use MSIS or Perturbation Settings, then just allow the data to specify the fields
+  !if (UseBcPerturbation) then
+  if(UseMSISBCs .or. UseGSWMTides .or. &
+     UseWACCMTides .or. UseBcPerturbation) then
+    ! Don't update the lower boundary cells of the Densities
+    ! Let them be specified by the data
+
+    do iSpecies = 1, nSpecies
+       if (IsPhotoChemical(iSpecies)) then
+          do iAlt = 0, -1, -1
+             h1 = dAlt_F(iAlt+2) ! dAlt_F(1) = Alt(1) - Alt(0);  h1 in notes  
+             h2 = dAlt_F(iAlt+3) ! dAlt_F(2) = Alt(2) - Alt(1);  h2 in notes
+             h3 = dAlt_F(iAlt+4) ! dAlt_F(3) = Alt(3) - Alt(2);  h3 in notes
+             h4 = dAlt_F(iAlt+5) ! dAlt_F(4) = Alt(4) - Alt(3);  h4 in notes
+
+             ! Mesh Coefficients are summations over the individual mesh scales
+             MeshH1 = h1                 
+             MeshH2 = h1 + h2            
+             MeshH3 = h1 + h2 + h3
+             MeshH4 = h1 + h2 + h3 + h4
+
+             !!! 3rd Order Mesh Coef
+             MeshCoef0 = -1.0*( MeshH2*MeshH3*MeshH4 + MeshH1*MeshH3*MeshH4 + &
+                                MeshH1*MeshH2*MeshH4 + MeshH1*MeshH2*MeshH3)/&
+                              (MeshH1*MeshH2*MeshH3*MeshH4) 
+             MeshCoef1 =  1.0*( MeshH2*MeshH3*MeshH4)/&
+                               (h1*h2*(h2 + h3)*(h2 + h3 + h4))
+             MeshCoef2 = -1.0*( MeshH1*MeshH3*MeshH4)/(MeshH2*h2*h3*(h3+h4))
+             MeshCoef3 =  1.0*( MeshH1*MeshH2*MeshH4)/(MeshH3*(h3+h2)*h3*h4)
+             MeshCoef4 = -1.0*( MeshH1*MeshH2*MeshH3)/&
+                               (MeshH4*(h2+h3+h4)*(h3+h4)*h4)
+
+             dLogNS = LogNS(iAlt+1,iSpecies)*MeshCoef0 + & 
+                      LogNS(iAlt+2,iSpecies)*MeshCoef1 + &
+                      LogNS(iAlt+3,iSpecies)*MeshCoef2 + &
+                      LogNS(iAlt+4,iSpecies)*MeshCoef3 + &
+                      LogNS(iAlt+5,iSpecies)*MeshCoef4
+
+             LogNS(iAlt, iSpecies) = &
+                  LogNS(iAlt+1,iSpecies) - dAlt_F(iAlt+1) * dLogNS 
+
+          ! Only allow the NO density to decrease by roughly 1/3 scale
+          ! height max
+          !if (iSpecies == iNO_) then
+          !   if (LogNS(iAlt,iSpecies) < LogNS(iAlt+1,iSpecies) - 0.333) then
+          !      LogNS(iAlt,iSpecies) = LogNS(iAlt+1,iSpecies) - 0.333
+          !   endif
+          !endif
+          enddo !iAlt = 0,-1,-1
+       endif !(.not. IsPhotoChemical(iSpecies)) then
+    enddo !iSpecies = 1, nSpecies
+
+  else ! Use MSIS/WACCM/GSWM
+
+    !----------- CASE: No Specified LBC --------------------
+    ! No Data Specification (keep 0 cell fixed)
+    ! Extend the densities downward
+    ! Neutral Densities
+    do iSpecies = 1, nSpecies
+
+       if (IsPhotoChemical(iSpecies)) then
+           do iAlt = 0, -1, -1
+              h1 = dAlt_F(iAlt+2) ! dAlt_F(1) = Alt(1) - Alt(0);  h1 in notes  
+              h2 = dAlt_F(iAlt+3) ! dAlt_F(2) = Alt(2) - Alt(1);  h2 in notes
+              h3 = dAlt_F(iAlt+4) ! dAlt_F(3) = Alt(3) - Alt(2);  h3 in notes
+              h4 = dAlt_F(iAlt+5) ! dAlt_F(4) = Alt(4) - Alt(3);  h4 in notes
+
+              ! Mesh Coefficients are summations over the individual mesh scales
+              MeshH1 = h1                 
+              MeshH2 = h1 + h2            
+              MeshH3 = h1 + h2 + h3
+              MeshH4 = h1 + h2 + h3 + h4
+
+              !!! 3rd Order Mesh Coef
+              MeshCoef0 = -1.0*( MeshH2*MeshH3*MeshH4 + MeshH1*MeshH3*MeshH4 + &
+                                 MeshH1*MeshH2*MeshH4 + MeshH1*MeshH2*MeshH3)/&
+                              (MeshH1*MeshH2*MeshH3*MeshH4) 
+              MeshCoef1 =  1.0*( MeshH2*MeshH3*MeshH4)/&
+                                (h1*h2*(h2 + h3)*(h2 + h3 + h4))
+              MeshCoef2 = -1.0*( MeshH1*MeshH3*MeshH4)/(MeshH2*h2*h3*(h3+h4))
+              MeshCoef3 =  1.0*( MeshH1*MeshH2*MeshH4)/(MeshH3*(h3+h2)*h3*h4)
+              MeshCoef4 = -1.0*( MeshH1*MeshH2*MeshH3)/&
+                                (MeshH4*(h2+h3+h4)*(h3+h4)*h4)
+
+              dLogNS = LogNS(iAlt+1,iSpecies)*MeshCoef0 + & 
+                       LogNS(iAlt+2,iSpecies)*MeshCoef1 + &
+                       LogNS(iAlt+3,iSpecies)*MeshCoef2 + &
+                       LogNS(iAlt+4,iSpecies)*MeshCoef3 + &
+                       LogNS(iAlt+5,iSpecies)*MeshCoef4
+
+              LogNS(iAlt, iSpecies) = &
+                   LogNS(iAlt+1,iSpecies) - dAlt_F(iAlt+1) * dLogNS 
+           enddo !iAlt = 0,-1,-1
+       else  ! Is PhotoChemical Check
+          iAlt = -1
+          h1 = dAlt_F(iAlt+2) ! dAlt_F(1) = Alt(1) - Alt(0);  h1 in notes  
+          h2 = dAlt_F(iAlt+3) ! dAlt_F(2) = Alt(2) - Alt(1);  h2 in notes
+          h3 = dAlt_F(iAlt+4) ! dAlt_F(3) = Alt(3) - Alt(2);  h3 in notes
+          h4 = dAlt_F(iAlt+5) ! dAlt_F(4) = Alt(4) - Alt(3);  h4 in notes
+
+          ! Mesh Coefficients are summations over the individual mesh scales
+          MeshH1 = h1                 
+          MeshH2 = h1 + h2            
+          MeshH3 = h1 + h2 + h3
+          MeshH4 = h1 + h2 + h3 + h4
+
+          !!! 3rd Order Mesh Coef
+          MeshCoef0 = -1.0*( MeshH2*MeshH3*MeshH4 + MeshH1*MeshH3*MeshH4 + &
+                             MeshH1*MeshH2*MeshH4 + MeshH1*MeshH2*MeshH3)/&
+                          (MeshH1*MeshH2*MeshH3*MeshH4) 
+          MeshCoef1 =  1.0*( MeshH2*MeshH3*MeshH4)/&
+                            (h1*h2*(h2 + h3)*(h2 + h3 + h4))
+          MeshCoef2 = -1.0*( MeshH1*MeshH3*MeshH4)/(MeshH2*h2*h3*(h3+h4))
+          MeshCoef3 =  1.0*( MeshH1*MeshH2*MeshH4)/(MeshH3*(h3+h2)*h3*h4)
+          MeshCoef4 = -1.0*( MeshH1*MeshH2*MeshH3)/&
+                            (MeshH4*(h2+h3+h4)*(h3+h4)*h4)
+
+          dLogNS = LogNS(iAlt+1,iSpecies)*MeshCoef0 + & 
+                   LogNS(iAlt+2,iSpecies)*MeshCoef1 + &
+                   LogNS(iAlt+3,iSpecies)*MeshCoef2 + &
+                   LogNS(iAlt+4,iSpecies)*MeshCoef3 + &
+                   LogNS(iAlt+5,iSpecies)*MeshCoef4
+
+          ! Only extend down to -1 Cells
+          LogNS(iAlt, iSpecies) = &
+               LogNS(iAlt+1,iSpecies) - dAlt_F(iAlt+1) * dLogNS 
+       endif ! PhotoChemical Check
+
+   enddo  ! iSpecies loop
+
+   ! If there is no LBC Specification
+   ! Set Vel_GD(East,North) = 0.0  at the LBC
+    do iAlt = 0, -1, -1
+       Vel_GD(iAlt,iEast_ ) = 0.0
+       Vel_GD(iAlt,iNorth_) = 0.0
+    enddo !iAlt = 0, -1, -1
+
+  endif ! Use MSIS/WACCM/GSWM
+
+  ! JMB: CONTINUE LBC SETTINGS
+  do iAlt = 0, -1, -1
+     h1 = dAlt_F(iAlt+2) ! dAlt_F(1) = Alt(1) - Alt(0);  h1 in notes  
+     h2 = dAlt_F(iAlt+3) ! dAlt_F(2) = Alt(2) - Alt(1);  h2 in notes
+     h3 = dAlt_F(iAlt+4) ! dAlt_F(3) = Alt(3) - Alt(2);  h3 in notes
+     h4 = dAlt_F(iAlt+5) ! dAlt_F(4) = Alt(4) - Alt(3);  h4 in notes
+
+     ! Mesh Coefficients are summations over the individual mesh scales
+     MeshH1 = h1                 
+     MeshH2 = h1 + h2            
+     MeshH3 = h1 + h2 + h3
+     MeshH4 = h1 + h2 + h3 + h4
+
+     !!! 3rd Order Mesh Coef
+     MeshCoef0 = -1.0*( MeshH2*MeshH3*MeshH4 + MeshH1*MeshH3*MeshH4 + &
+                        MeshH1*MeshH2*MeshH4 + MeshH1*MeshH2*MeshH3)/&
+                      (MeshH1*MeshH2*MeshH3*MeshH4) 
+     MeshCoef1 =  1.0*( MeshH2*MeshH3*MeshH4)/&
+                       (h1*h2*(h2 + h3)*(h2 + h3 + h4))
+     MeshCoef2 = -1.0*( MeshH1*MeshH3*MeshH4)/(MeshH2*h2*h3*(h3+h4))
+     MeshCoef3 =  1.0*( MeshH1*MeshH2*MeshH4)/(MeshH3*(h3+h2)*h3*h4)
+     MeshCoef4 = -1.0*( MeshH1*MeshH2*MeshH3)/&
+                       (MeshH4*(h2+h3+h4)*(h3+h4)*h4)
+
+    ! -------------------------------------------------
+    ! Ions
+    ! -------------------------------------------------
+    ! Ions Float at the LBC
+    do iSpecies = 1, nIons-1
+       ! Simply assume no gradient, since this is a region in which
+       ! chemitry is dominant.  It shouldn't matter, really:
+       LogINS(iAlt,iSpecies) = LogINS(iAlt+1,iSpecies)
+    enddo ! Ions
+
+    ! Electon Density:
+    if (UseImprovedIonAdvection) then
+       LogINS(iAlt,nIons) = sum(LogINS(iAlt,1:nIons-1))
+    else
+       LogINS(iAlt,nIons) = alog(sum(exp(LogINS(iAlt,1:nIons-1))))
+    endif
+    ! Set the Ion Bulk Winds
+    do iDir = 1, 3
+       !dVertVel = IVel(iAlt+1,iDir)*MeshCoef0 + & 
+       !           IVel(iAlt+2,iDir)*MeshCoef1 + &
+       !           IVel(iAlt+3,iDir)*MeshCoef2 + &
+       !           IVel(iAlt+4,iDir)*MeshCoef3 + &
+       !           IVel(iAlt+5,iDir)*MeshCoef4
+!
+!       IVel(iAlt  ,iDir) = IVel(iAlt+1,iDir) - dAlt_F(iAlt+1)*dVertVel 
+       ! Fix the winds at the LBC
+       IVel(iAlt  ,iDir) = 0.0
+    enddo  ! iDir
+
+    ! -------------------------------------------------
+    ! Return to the neutrals, to deal with (vertical) winds now...
+    ! -------------------------------------------------
+    
+    do iSpecies = 1, nSpecies
+         dVertVel = VertVel(iAlt+1, iSpecies) * MeshCoef0 + & 
+                    VertVel(iAlt+2, iSpecies) * MeshCoef1 + &
+                    VertVel(iAlt+3, iSpecies) * MeshCoef2 + &
+                    VertVel(iAlt+4, iSpecies) * MeshCoef3 + &
+                    VertVel(iAlt+5, iSpecies) * MeshCoef4
+
+         VertVel(iAlt, iSpecies) = VertVel(iAlt+1,iSpecies) - &
+                                   dAlt_F(iAlt+1) * dVertVel 
+    enddo ! nSpecies
+
+    ! Update NS & LogRho to use in the vertical wind calculation:
+    NS(iAlt,1:nSpecies) = exp(LogNS(iAlt,1:nSpecies))
+    SumRho = 0.0     
+    do iSpecies = 1, nSpecies
+       SumRho  = SumRho  + Mass(iSpecies) * NS(iAlt, iSpecies)
+    enddo
+    LogRho(iAlt) = alog(SumRho)
+
+    ! Calculate the bulk vertical winds:
+    Vel_GD(iAlt,iUp_) = 0.0
+    do iSpecies = 1, nSpecies
+       Vel_GD(iAlt,iUp_) = Vel_GD(iAlt,iUp_) + &
+            NS(iAlt,iSpecies) * Mass(iSpecies) * VertVel(iAlt,iSpecies) / &
+            exp(LogRho(iAlt))
+    enddo 
+
+  enddo ! End Outer IAlt Loop (0, -1, -1) 
+
+  ! Special Case for PhotoChemical Species
+  ! Allow O to flow upward
+  do iSpecies = 1, nSpecies
+     if ( (IsPhotoChemical(iSpecies)) .and. &
+          (VertVel(1, iSpecies) .gt. 0.0) .and. &
+          (iSpecies .ne. iO_3P_) ) then 
+        ! Do NOT allow photochemical species to flow upward!
+        ! The problem becomes unconstrained
+        VertVel( 0, iSpecies) = -1.0 * VertVel(1, iSpecies)
+        VertVel(-1, iSpecies) = -1.0 * VertVel(1, iSpecies)
+     endif  
+  enddo 
+
   !------------------------------------------------------------------------
   !------------------------------------------------------------------------
   ! TOP
@@ -421,60 +414,93 @@ subroutine set_vertical_bcs(LogRho,LogNS,Vel_GD,Temp, LogINS, iVel, VertVel)
 
   ! Slip flow at the top
   ! Assume zero gradients in the velocities & temps
-  Vel_GD(nAlts+1:nAlts+2, iEast_)  = Vel_GD(nAlts, iEast_)
-  Vel_GD(nAlts+1:nAlts+2, iNorth_) = Vel_GD(nAlts, iNorth_)
-
-  IVel(nAlts+1:nAlts+2, iEast_)  = IVel(nAlts, iEast_)
-  IVel(nAlts+1:nAlts+2, iNorth_) = IVel(nAlts, iNorth_)
+  !IVel(nAlts+1:nAlts+2, iEast_)  = IVel(nAlts, iEast_)
+  !IVel(nAlts+1:nAlts+2, iNorth_) = IVel(nAlts, iNorth_)
 
 
-  ! Vertical wind upper BCs:
-  
-  do iSpecies = 1, nSpecies
+  !! Vertical wind upper BCs:
+  !do iSpecies = 1, nSpecies
+  !   VertVel(nAlts+1, iSpecies) =  VertVel(nAlts, iSpecies)
+  !   VertVel(nAlts+2, iSpecies) =  VertVel(nAlts, iSpecies)
+  !   ! Can't have photochemical species flowing downward
+  !   if (IsPhotoChemical(iSpecies) .and. &
+  !        (VertVel(nAlts,iSpecies) .lt. 0.0) ) then
+  !      VertVel(nAlts+1, iSpecies) = -VertVel(nAlts, iSpecies)
+  !      VertVel(nAlts+2, iSpecies) = -VertVel(nAlts-1, iSpecies)
+  !   endif
+  !enddo 
 
-     VertVel(nAlts+1, iSpecies) =  VertVel(nAlts, iSpecies)
-     VertVel(nAlts+2, iSpecies) =  VertVel(nAlts, iSpecies)
-
-     ! Can't have photochemical species flowing downward
-     if (IsPhotoChemical(iSpecies) .and. &
-          (VertVel(nAlts,iSpecies) .lt. 0.0) ) then
-        VertVel(nAlts+1, iSpecies) = -VertVel(nAlts, iSpecies)
-        VertVel(nAlts+2, iSpecies) = -VertVel(nAlts-1, iSpecies)
-     endif
-
-  enddo 
-
-  if (Vel_GD(nAlts,iUp_) < 0.0) then
-     Vel_GD(nAlts+1, iUp_) = -Vel_GD(nAlts, iUp_)
-     Vel_GD(nAlts+2, iUp_) = -Vel_GD(nAlts, iUp_)
-  else
-     Vel_GD(nAlts+1, iUp_) =  Vel_GD(nAlts, iUp_)
-     Vel_GD(nAlts+2, iUp_) =  Vel_GD(nAlts, iUp_)
-  endif
+  !if (Vel_GD(nAlts,iUp_) < 0.0) then
+  !   Vel_GD(nAlts+1, iUp_) = -Vel_GD(nAlts, iUp_)
+  !   Vel_GD(nAlts+2, iUp_) = -Vel_GD(nAlts, iUp_)
+  !else
+  !   Vel_GD(nAlts+1, iUp_) =  Vel_GD(nAlts, iUp_)
+  !   Vel_GD(nAlts+2, iUp_) =  Vel_GD(nAlts, iUp_)
+  !endif
 
   ! Vertical Ion Drifts:
-  if (IVel(nAlts,iUp_) < 0.0) then
-     IVel(nAlts+1,iUp_) = -IVel(nAlts,iUp_)
-     IVel(nAlts+2,iUp_) = -IVel(nAlts,iUp_)
-  else
-     IVel(nAlts+1,iUp_) = IVel(nAlts,iUp_)
-     IVel(nAlts+2,iUp_) = IVel(nAlts,iUp_)
-  endif
+  !if (IVel(nAlts,iUp_) < 0.0) then
+  !   IVel(nAlts+1,iUp_) = -IVel(nAlts,iUp_)
+  !   IVel(nAlts+2,iUp_) = -IVel(nAlts,iUp_)
+  !else
+  !   IVel(nAlts+1,iUp_) = IVel(nAlts,iUp_)
+  !   IVel(nAlts+2,iUp_) = IVel(nAlts,iUp_)
+  !endif
 
   ! Constant temperature (zero gradient)
 
-  Temp(nAlts+1) = Temp(nAlts)
-  Temp(nAlts+2) = Temp(nAlts)
+  do iAlt = nAlts+1, nAlts+2
+     hm1 = dAlt_F(iAlt  )
+     hm2 = dAlt_F(iAlt-1)
+     MeshCoefm0 = (2.0*hm1 + hm2)/(hm1*(hm1+hm2))
+     MeshCoefm1 = -1.0*(hm1 + hm2)/(hm1*hm2)
+     MeshCoefm2 = hm1/(hm2*(hm1+hm2))
 
-  dn = (LogRho(nAlts) - LogRho(nAlts-1))
-  LogRho(nAlts+1) = LogRho(nAlts) + dn
-  LogRho(nAlts+2) = LogRho(nAlts+1) + dn
+    ! dT/dr = 0
+     Temp(iAlt) = &
+        -1.0*(MeshCoefm1*Temp(iAlt-1) + & 
+              MeshCoefm2*Temp(iAlt-2))/ & 
+              MeshCoefm0
+     ! dVs/dr = 0.0
+     do iSpecies =1, nSpecies
+        VertVel(iAlt,iSpecies) = &
+           -1.0*(MeshCoefm1*VertVel(iAlt-1,iSpecies) + & 
+                 MeshCoefm2*VertVel(iAlt-2,iSpecies))/ & 
+                 MeshCoefm0
+     enddo !iSpecies =1, nSpecies
+
+     do iDir = iEast_, iNorth_
+        Vel_GD(iAlt,iDir) = &
+           -1.0*(MeshCoefm1*Vel_GD(iAlt-1,iDir) + & 
+                 MeshCoefm2*Vel_GD(iAlt-2,iDir))/ & 
+                 MeshCoefm0
+        IVel(iAlt,iDir) = &
+           -1.0*(MeshCoefm1*IVel(iAlt-1,iDir) + & 
+                 MeshCoefm2*IVel(iAlt-2,iDir))/ & 
+                 MeshCoefm0
+     enddo !iDir = 1, 3
+  enddo !iAlt = nAlts+1, nAlts+2
+
+  !! Vertical wind upper BCs:
+  do iSpecies = 1, nSpecies
+     ! Can't have photochemical species flowing downward
+     if (IsPhotoChemical(iSpecies) .and. &
+          (VertVel(nAlts,iSpecies) .lt. 0.0) ) then
+        VertVel(nAlts+1, iSpecies) = 0.0
+        VertVel(nAlts+2, iSpecies) = 0.0
+     endif
+  enddo 
+
+  ! Limit Ion Downwelling
+  if (IVel(nAlts,iUp_) < 0.0) then
+     IVel(nAlts+1,iUp_) = 0.0
+     IVel(nAlts+2,iUp_) = 0.0
+  endif
+
 
   ! Hydrostatic pressure for the neutrals
-
   do iSpecies=1,nSpecies
      do iAlt = nAlts+1, nAlts+2
-
         MeanGravity = -0.5*(EffectiveGravity(iAlt) + EffectiveGravity(iAlt-1))
         MeanTemp =  0.5*( Temp(iAlt-1) + Temp(iAlt) )
         InvScaleHeightS =  MeanGravity * Mass(iSpecies) / &
@@ -485,7 +511,6 @@ subroutine set_vertical_bcs(LogRho,LogNS,Vel_GD,Temp, LogINS, iVel, VertVel)
              exp(-InvScaleHeightS * dAlt_F(iAlt)) 
 
         LogNS(iAlt,iSpecies) = alog(NS(iAlt,iSpecies))
-
      enddo
   enddo
 
@@ -599,13 +624,24 @@ subroutine set_vertical_bcs(LogRho,LogNS,Vel_GD,Temp, LogINS, iVel, VertVel)
            
   enddo
 
+  ! JMB: Final Neutral Wind Specifications
   do iAlt = nAlts+1, nAlts+2
-     SumRho = 0.0     
-     do iSpecies=1,nSpecies
-        SumRho  = SumRho  + Mass(iSpecies)*exp(LogNS(iAlt,iSpecies))     
-     enddo
-     LogRho(iAlt) = alog(SumRho)
-  enddo
+    ! Update NS & LogRho to use in the vertical wind calculation:
+    NS(iAlt,1:nSpecies) = exp(LogNS(iAlt,1:nSpecies))
+    SumRho = 0.0     
+    do iSpecies = 1, nSpecies
+       SumRho  = SumRho  + Mass(iSpecies) * NS(iAlt, iSpecies)
+    enddo
+    LogRho(iAlt) = alog(SumRho)
+
+    ! Calculate the bulk vertical winds:
+    Vel_GD(iAlt,iUp_) = 0.0
+    do iSpecies = 1, nSpecies
+       Vel_GD(iAlt,iUp_) = Vel_GD(iAlt,iUp_) + &
+            NS(iAlt,iSpecies) * Mass(iSpecies) * VertVel(iAlt,iSpecies) / &
+            exp(LogRho(iAlt))
+    enddo 
+  enddo !iAlt = nAlts+1, nAlts+2
 
 contains
 
