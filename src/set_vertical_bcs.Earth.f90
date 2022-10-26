@@ -55,7 +55,7 @@ subroutine set_vertical_bcs(LogRho,LogNS,Vel_GD,Temp, LogINS, iVel, VertVel)
   real :: SumRho
   real :: EffectiveGravity(-1:nAlts+2)
   real :: MeanGravity, MeanMass, MeanTemp
-  logical :: IsHydrostatic(1:nSpecies), IsPhotoChemical(1:nSpecies)
+  logical :: IsHydrostatic(1:nSpecies)
 
   logical :: UsePlasmasphereBC
   
@@ -85,10 +85,6 @@ subroutine set_vertical_bcs(LogRho,LogNS,Vel_GD,Temp, LogINS, iVel, VertVel)
   ! Bottom
   !------------------------------------------------------------------------
   !------------------------------------------------------------------------
-
-  IsPhotoChemical(1:nSpecies) = .false.
-  IsPhotoChemical(iN_4S_) = .true.
-  IsPhotoChemical(iNO_) = .true.
 
   NS(-1:nAlts+2,1:nSpecies) = exp(LogNS(-1:nAlts+2,1:nSpecies))
 

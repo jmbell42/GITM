@@ -26,9 +26,9 @@ end subroutine check_ion_densities
 subroutine advance_vertical_1d_ausm
 
   use ModVertical
-  use ModPlanet, only: Mass
+  use ModPlanet, only: Mass, cSpecies
   use ModGITM, ONLY : Dt, iCommGITM, iProc, iUp_
-  use ModInputs, only: UseBarriers, iDebugLevel
+  use ModInputs, only: UseBarriers, iDebugLevel, IsPhotoChemical
   implicit none
   !-----------------------------------------------------------
   integer :: iError, iAlt, iSpecies, iDir
@@ -53,35 +53,6 @@ subroutine advance_vertical_1d_ausm
   real :: FinalVel_GD(-1:nAlts+2,1:3)
   real :: FinalTemp(-1:nAlts+2)
   real :: FinalVS(-1:nAlts+2,1:nSpecies)
-
-!!! RK-4 Coefficients
-  real :: K1LogNS(-1:nAlts+2,1:nSpecies)
-  real :: K1LogINS(-1:nAlts+2,1:nIons)
-  real :: K1LogRho(-1:nAlts+2)
-  real :: K1Vel_GD(-1:nAlts+2,1:3)
-  real :: K1Temp(-1:nAlts+2)
-  real :: K1VS(-1:nAlts+2,1:nSpecies)
-
-  real :: K2LogNS(-1:nAlts+2,1:nSpecies)
-  real :: K2LogINS(-1:nAlts+2,1:nIons)
-  real :: K2LogRho(-1:nAlts+2)
-  real :: K2Vel_GD(-1:nAlts+2,1:3)
-  real :: K2Temp(-1:nAlts+2)
-  real :: K2VS(-1:nAlts+2,1:nSpecies)
-
-  real :: K3LogNS(-1:nAlts+2,1:nSpecies)
-  real :: K3LogINS(-1:nAlts+2,1:nIons)
-  real :: K3LogRho(-1:nAlts+2)
-  real :: K3Vel_GD(-1:nAlts+2,1:3)
-  real :: K3Temp(-1:nAlts+2)
-  real :: K3VS(-1:nAlts+2,1:nSpecies)
-
-  real :: K4LogNS(-1:nAlts+2,1:nSpecies)
-  real :: K4LogINS(-1:nAlts+2,1:nIons)
-  real :: K4LogRho(-1:nAlts+2)
-  real :: K4Vel_GD(-1:nAlts+2,1:3)
-  real :: K4Temp(-1:nAlts+2)
-  real :: K4VS(-1:nAlts+2,1:nSpecies)
 
 !!! RStage-4 Coefficients
   real :: Stage1LogNS(-1:nAlts+2,1:nSpecies)
@@ -112,13 +83,10 @@ subroutine advance_vertical_1d_ausm
   real :: Stage4Temp(-1:nAlts+2)
   real :: Stage4VS(-1:nAlts+2,1:nSpecies)
 
-  real :: DtOriginal
   real :: DtIn
 
   if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
   if (iDebugLevel > 6) write(*,*) "=======> vertical bcs 1", iproc
-
-  DtOriginal = Dt  !!! Store this so that it doesn't change
 
 !!! =================
 !!! General RK4 Update:
@@ -150,6 +118,27 @@ subroutine advance_vertical_1d_ausm
     Stage1Temp(-1:nAlts+2)               =    Temp(-1:nAlts+2)
       Stage1VS(-1:nAlts+2,1:nSpecies)    = VertVel(-1:nAlts+2,1:nSpecies)
 
+   Stage2LogNS(-1:nAlts+2,1:nSpecies)    =   LogNS(-1:nAlts+2,1:nSpecies)
+  Stage2LogINS(-1:nAlts+2,1:nIons) =  LogINS(-1:nAlts+2,1:nIons)
+  Stage2LogRho(-1:nAlts+2)               =  LogRho(-1:nAlts+2)
+  Stage2Vel_GD(-1:nAlts+2,1:3)           =  Vel_GD(-1:nAlts+2,1:3)
+    Stage2Temp(-1:nAlts+2)               =    Temp(-1:nAlts+2)
+      Stage2VS(-1:nAlts+2,1:nSpecies)    = VertVel(-1:nAlts+2,1:nSpecies)
+
+   Stage3LogNS(-1:nAlts+2,1:nSpecies)    =   LogNS(-1:nAlts+2,1:nSpecies)
+  Stage3LogINS(-1:nAlts+2,1:nIons) =  LogINS(-1:nAlts+2,1:nIons)
+  Stage3LogRho(-1:nAlts+2)               =  LogRho(-1:nAlts+2)
+  Stage3Vel_GD(-1:nAlts+2,1:3)           =  Vel_GD(-1:nAlts+2,1:3)
+    Stage3Temp(-1:nAlts+2)               =    Temp(-1:nAlts+2)
+      Stage3VS(-1:nAlts+2,1:nSpecies)    = VertVel(-1:nAlts+2,1:nSpecies)
+
+   Stage4LogNS(-1:nAlts+2,1:nSpecies)    =   LogNS(-1:nAlts+2,1:nSpecies)
+  Stage4LogINS(-1:nAlts+2,1:nIons) =  LogINS(-1:nAlts+2,1:nIons)
+  Stage4LogRho(-1:nAlts+2)               =  LogRho(-1:nAlts+2)
+  Stage4Vel_GD(-1:nAlts+2,1:3)           =  Vel_GD(-1:nAlts+2,1:3)
+    Stage4Temp(-1:nAlts+2)               =    Temp(-1:nAlts+2)
+      Stage4VS(-1:nAlts+2,1:nSpecies)    = VertVel(-1:nAlts+2,1:nSpecies)
+
   NewLogNS = LogNS
   NewLogINS = LogINS
   NewLogRho = LogRho
@@ -164,29 +153,29 @@ subroutine advance_vertical_1d_ausm
 
 !!! note that Stage 1 -> updated by a 1/2 step
 !!! (NewLogNS - LogNS) = f(tn + Dt/2, yn + dt/2)
-       Stage2LogNS(-1:nAlts+2,1:nSpecies)      = &
-       Stage1LogNS(-1:nAlts+2,1:nSpecies)      + &
-     (NewLogNS(-1:nAlts+2,1:nSpecies) - LogNS(-1:nAlts+2,1:nSpecies))
+       Stage2LogNS(1:nAlts,1:nSpecies)      = &
+       Stage1LogNS(1:nAlts,1:nSpecies)      + &
+     (NewLogNS(1:nAlts,1:nSpecies) - LogNS(1:nAlts,1:nSpecies))
 
-      Stage2LogINS(-1:nAlts+2,1:nIons)  = &
-      Stage1LogINS(-1:nAlts+2,1:nIons)  + &
-    (NewLogINS(-1:nAlts+2,1:nIons) - LogINS(-1:nAlts+2,1:nIons))
+      Stage2LogINS(1:nAlts,1:nIons)  = &
+      Stage1LogINS(1:nAlts,1:nIons)  + &
+    (NewLogINS(1:nAlts,1:nIons) - LogINS(1:nAlts,1:nIons))
 
-      Stage2LogRho(-1:nAlts+2)                = &
-      Stage1LogRho(-1:nAlts+2)                + &
-    (NewLogRho(-1:nAlts+2) - LogRho(-1:nAlts+2))
+      Stage2LogRho(1:nAlts)                = &
+      Stage1LogRho(1:nAlts)                + &
+    (NewLogRho(1:nAlts) - LogRho(1:nAlts))
 
-      Stage2Vel_GD(-1:nAlts+2,1:3)            = & 
-      Stage1Vel_GD(-1:nAlts+2,1:3)            + & 
-    (NewVel_GD(-1:nAlts+2,1:3) - Vel_GD(-1:nAlts+2,1:3))
+      Stage2Vel_GD(1:nAlts,1:3)            = & 
+      Stage1Vel_GD(1:nAlts,1:3)            + & 
+    (NewVel_GD(1:nAlts,1:3) - Vel_GD(1:nAlts,1:3))
 
-        Stage2Temp(-1:nAlts+2)                  = &
-        Stage1Temp(-1:nAlts+2)                  + &
-     (NewTemp(-1:nAlts+2) -  Temp(-1:nAlts+2))
+        Stage2Temp(1:nAlts)                  = &
+        Stage1Temp(1:nAlts)                  + &
+     (NewTemp(1:nAlts) -  Temp(1:nAlts))
 
-          Stage2VS(-1:nAlts+2,1:nSpecies)      = &
-          Stage1VS(-1:nAlts+2,1:nSpecies)      + &
-   (NewVertVel(-1:nAlts+2,1:nSpecies) - VertVel(-1:nAlts+2,1:nSpecies))
+          Stage2VS(1:nAlts,1:nSpecies)      = &
+          Stage1VS(1:nAlts,1:nSpecies)      + &
+   (NewVertVel(1:nAlts,1:nSpecies) - VertVel(1:nAlts,1:nSpecies))
 
   !!! Now Calculate the Next Update Stage
   !!! We need Y(Updated) = Y(n) + 0.5*Stage2
@@ -233,29 +222,29 @@ subroutine advance_vertical_1d_ausm
        LogRho, LogNS, Vel_GD, Temp, NewLogRho, NewLogNS, NewVel_GD, NewTemp, &
        LogINS, NewLogINS, IVel, VertVel, NewVertVel)
 
-       Stage3LogNS(-1:nAlts+2,1:nSpecies)      = &
-       Stage1LogNS(-1:nAlts+2,1:nSpecies)      + &
-     (NewLogNS(-1:nAlts+2,1:nSpecies) - LogNS(-1:nAlts+2,1:nSpecies))
+       Stage3LogNS(1:nAlts,1:nSpecies)      = &
+       Stage1LogNS(1:nAlts,1:nSpecies)      + &
+     (NewLogNS(1:nAlts,1:nSpecies) - LogNS(1:nAlts,1:nSpecies))
 
-      Stage3LogINS(-1:nAlts+2,1:nIons)  = &
-      Stage1LogINS(-1:nAlts+2,1:nIons)  + &
-    (NewLogINS(-1:nAlts+2,1:nIons) - LogINS(-1:nAlts+2,1:nIons))
+      Stage3LogINS(1:nAlts,1:nIons)  = &
+      Stage1LogINS(1:nAlts,1:nIons)  + &
+    (NewLogINS(1:nAlts,1:nIons) - LogINS(1:nAlts,1:nIons))
 
-      Stage3LogRho(-1:nAlts+2)                = &
-      Stage1LogRho(-1:nAlts+2)                + &
-    (NewLogRho(-1:nAlts+2) - LogRho(-1:nAlts+2))
+      Stage3LogRho(1:nAlts)                = &
+      Stage1LogRho(1:nAlts)                + &
+    (NewLogRho(1:nAlts) - LogRho(1:nAlts))
 
-      Stage3Vel_GD(-1:nAlts+2,1:3)            = & 
-      Stage1Vel_GD(-1:nAlts+2,1:3)            + & 
-    (NewVel_GD(-1:nAlts+2,1:3) - Vel_GD(-1:nAlts+2,1:3))
+      Stage3Vel_GD(1:nAlts,1:3)            = & 
+      Stage1Vel_GD(1:nAlts,1:3)            + & 
+    (NewVel_GD(1:nAlts,1:3) - Vel_GD(1:nAlts,1:3))
 
-        Stage3Temp(-1:nAlts+2)                  = &
-        Stage1Temp(-1:nAlts+2)                  + &
-      (NewTemp(-1:nAlts+2) -  Temp(-1:nAlts+2))
+        Stage3Temp(1:nAlts)                  = &
+        Stage1Temp(1:nAlts)                  + &
+      (NewTemp(1:nAlts) -  Temp(1:nAlts))
 
-          Stage3VS(-1:nAlts+2,1:nSpecies)      = &
-          Stage1VS(-1:nAlts+2,1:nSpecies)      + &
-   (NewVertVel(-1:nAlts+2,1:nSpecies) - VertVel(-1:nAlts+2,1:nSpecies))
+          Stage3VS(1:nAlts,1:nSpecies)      = &
+          Stage1VS(1:nAlts,1:nSpecies)      + &
+   (NewVertVel(1:nAlts,1:nSpecies) - VertVel(1:nAlts,1:nSpecies))
 
   !!! Now Calculate the Next Update Stage
   !!! We need Y(Updated) = Y(n) + 0.5*Stage3
@@ -306,29 +295,29 @@ subroutine advance_vertical_1d_ausm
        LogINS, NewLogINS, IVel, VertVel, NewVertVel)
 !!!! K3 Coefficients for RK-4
 
-       Stage4LogNS(-1:nAlts+2,1:nSpecies)      = &
-       Stage1LogNS(-1:nAlts+2,1:nSpecies)      + &
-     (NewLogNS(-1:nAlts+2,1:nSpecies) - LogNS(-1:nAlts+2,1:nSpecies))
+       Stage4LogNS(1:nAlts,1:nSpecies)      = &
+       Stage1LogNS(1:nAlts,1:nSpecies)      + &
+     (NewLogNS(1:nAlts,1:nSpecies) - LogNS(1:nAlts,1:nSpecies))
 
-      Stage4LogINS(-1:nAlts+2,1:nIons)  = &
-      Stage1LogINS(-1:nAlts+2,1:nIons)  + &
-    (NewLogINS(-1:nAlts+2,1:nIons) - LogINS(-1:nAlts+2,1:nIons))
+      Stage4LogINS(1:nAlts,1:nIons)  = &
+      Stage1LogINS(1:nAlts,1:nIons)  + &
+    (NewLogINS(1:nAlts,1:nIons) - LogINS(1:nAlts,1:nIons))
 
-      Stage4LogRho(-1:nAlts+2)                = &
-      Stage1LogRho(-1:nAlts+2)                + &
-    (NewLogRho(-1:nAlts+2) - LogRho(-1:nAlts+2))
+      Stage4LogRho(1:nAlts)                = &
+      Stage1LogRho(1:nAlts)                + &
+    (NewLogRho(1:nAlts) - LogRho(1:nAlts))
 
-      Stage4Vel_GD(-1:nAlts+2,1:3)            = & 
-      Stage1Vel_GD(-1:nAlts+2,1:3)            + & 
-    (NewVel_GD(-1:nAlts+2,1:3) - Vel_GD(-1:nAlts+2,1:3))
+      Stage4Vel_GD(1:nAlts,1:3)            = & 
+      Stage1Vel_GD(1:nAlts,1:3)            + & 
+    (NewVel_GD(1:nAlts,1:3) - Vel_GD(1:nAlts,1:3))
 
-        Stage4Temp(-1:nAlts+2)                  = &
-        Stage1Temp(-1:nAlts+2)                  + &
-      (NewTemp(-1:nAlts+2) -  Temp(-1:nAlts+2))
+        Stage4Temp(1:nAlts)                  = &
+        Stage1Temp(1:nAlts)                  + &
+      (NewTemp(1:nAlts) -  Temp(1:nAlts))
 
-          Stage4VS(-1:nAlts+2,1:nSpecies)      = &
-          Stage1VS(-1:nAlts+2,1:nSpecies)      + &
-   (NewVertVel(-1:nAlts+2,1:nSpecies) - VertVel(-1:nAlts+2,1:nSpecies))
+          Stage4VS(1:nAlts,1:nSpecies)      = &
+          Stage1VS(1:nAlts,1:nSpecies)      + &
+   (NewVertVel(1:nAlts,1:nSpecies) - VertVel(1:nAlts,1:nSpecies))
 
   !!! Now Calculate the Next Update Stage
   !!! We need Y(Updated) = Y(n) + 0.5*Stage4
@@ -1152,6 +1141,9 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   real, dimension(1:nAlts) :: GammaLeft_M12, GammaRight_M12
   real, dimension(1:nAlts) :: GammaLeft_P12, GammaRight_P12
 
+  real, dimension(1:nAlts) :: TempLeft_M12, TempRight_M12
+  real, dimension(1:nAlts) :: TempLeft_P12, TempRight_P12
+
   real, dimension(1:nAlts) :: ELeft_M12, ERight_M12
   real, dimension(1:nAlts) :: ELeft_P12, ERight_P12
 
@@ -1174,11 +1166,20 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
                                          LogHydroPressureSRight_M12
   real, dimension(1:nAlts,1:nSpecies) :: LogHydroPressureSLeft_P12, &
                                          LogHydroPressureSRight_P12
-
   real, dimension(1:nAlts,1:nSpecies) :: HydroPressureSLeft_M12, &
                                         HydroPressureSRight_M12
   real, dimension(1:nAlts,1:nSpecies) :: HydroPressureSLeft_P12, &
                                          HydroPressureSRight_P12
+
+  real, dimension(-1:nAlts+2,1:nSpecies) :: LogHydroRhoS
+  real, dimension(1:nAlts,1:nSpecies) :: LogHydroRhoSLeft_M12, &
+                                         LogHydroRhoSRight_M12
+  real, dimension(1:nAlts,1:nSpecies) :: LogHydroRhoSLeft_P12, &
+                                         LogHydroRhoSRight_P12
+  real, dimension(1:nAlts,1:nSpecies) :: HydroRhoSLeft_M12, &
+                                        HydroRhoSRight_M12
+  real, dimension(1:nAlts,1:nSpecies) :: HydroRhoSLeft_P12, &
+                                         HydroRhoSRight_P12
 
   real, dimension(1:nAlts,1:nSpecies) :: MeanHydroPressureS_M12
   real, dimension(1:nAlts,1:nSpecies) :: MeanHydroPressureS_P12
@@ -1223,8 +1224,14 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
   real, dimension(1:nAlts) :: LiouEnthalpyLeft_M12, LiouEnthalpyRight_M12
   real, dimension(1:nAlts) :: LiouEnthalpyLeft_P12, LiouEnthalpyRight_P12
-
   real, dimension(1:nAlts) :: InterfaceCS_M12, InterfaceCS_P12
+
+  real, dimension(1:nAlts,1:nSpecies) :: SpeciesLiouCSLeft_M12, SpeciesLiouCSRight_M12
+  real, dimension(1:nAlts,1:nSpecies) :: SpeciesLiouCSLeft_P12, SpeciesLiouCSRight_P12
+
+  real, dimension(1:nAlts,1:nSpecies) :: SpeciesLiouEnthalpyLeft_M12, SpeciesLiouEnthalpyRight_M12
+  real, dimension(1:nAlts,1:nSpecies) :: SpeciesLiouEnthalpyLeft_P12, SpeciesLiouEnthalpyRight_P12
+
 
   real, dimension(1:nAlts,1:nSpecies) :: MLeft_M12, MRight_M12
   real, dimension(1:nAlts,1:nSpecies) :: MLeft_P12, MRight_P12
@@ -1234,9 +1241,6 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
   real, dimension(1:nAlts,1:nSpecies) :: MZero_M12, MZero_P12
   real:: MInf, LiouBeta
-  real, dimension(1:nAlts,1:nSpecies):: ModifiedZeta
-
-  real, dimension(1:nAlts,1:nSpecies) :: FA_M12, FA_P12
 
 !!! Polynomial Mach Functions
 
@@ -1265,6 +1269,8 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   real, dimension(1:nAlts,1:nSpecies) :: MPress_M12, MPress_P12
 
 !!!! Interface Mach Number
+  real, dimension(1:nAlts,1:nSpecies) :: SpeciesInterfaceCS_M12, SpeciesInterfaceCS_P12
+  real, dimension(1:nAlts,1:nSpecies) :: SpeciesMeanCS_M12, SpeciesMeanCS_P12
   real, dimension(1:nAlts,1:nSpecies) :: InterfaceMach_M12, InterfaceMach_P12
 
   real, dimension(1:nAlts,1:nSpecies) :: LiouNumericalVelocity_M12, &
@@ -1272,28 +1278,26 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
 !!! Extract Mean Atmosphere Values
 
-  real :: LogKpS(1:nAlts,1:nSpecies), LogKuS(1:nAlts,1:nSpecies)
-  real :: LogMinKpS(1:nAlts,1:nSpecies), LogMinKuS(1:nAlts,1:nSpecies)
-  real :: LogMaxKpS(1:nAlts,1:nSpecies), LogMaxKuS(1:nAlts,1:nSpecies)
 ! Thornber Correction
   real :: ZVar, VL, VR, CBar, ML, MR
 
   ! Updated LiouKpS and KuS
   real :: LiouKpS_P12(1:nAlts,1:nSpecies), LiouKuS_P12(1:nAlts,1:nSpecies)
   real :: LiouKpS_M12(1:nAlts,1:nSpecies), LiouKuS_M12(1:nAlts,1:nSpecies)
-  real :: LogKpS_P12(1:nAlts,1:nSpecies), LogKuS_P12(1:nAlts,1:nSpecies)
-  real :: LogKpS_M12(1:nAlts,1:nSpecies), LogKuS_M12(1:nAlts,1:nSpecies)
+  real :: LogKuS_P12(1:nAlts,1:nSpecies), LogKuS_M12(1:nAlts,1:nSpecies)
+  real :: LogMaxKuS(1:nAlts,1:nSpecies), LogMinKuS(1:nAlts,1:nSpecies)
   real :: Alt_P12, Alt_M12
   real :: MachScaling
-
 
   MInf = 1.0e-19
   LiouBeta = 1.0/8.0
 
   LogRhoS(-1:nAlts+2,1:nSpecies) = alog(RhoS(-1:nAlts+2,1:nSpecies))
+  LogHydroRhoS(-1:nAlts+2,1:nSpecies) = alog(HydroRhoS(-1:nAlts+2,1:nSpecies))
   LogPS(-1:nAlts+2,1:nSpecies) = alog(PressureS(-1:nAlts+2,1:nSpecies))
   LogHydroPressureS(-1:nAlts+2,1:nSpecies) = &
                             alog(HydroPressureS(-1:nAlts+2,1:nSpecies))
+
 
 !!!! Grab the left and right states of the Variables
 !!!!  on boh Interfaces (P12 = +1/2 and M12 = -1/2)
@@ -1313,93 +1317,6 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
     enddo 
 
-!    write(*,*) '==================== CALC_HYDRO_FLUXES ================'
-!    write(*,*) '======= M12 FACEVALUES ========'
-!    do iSpecies = 1, nSpecies
-!       write(*,*) '  SPECIES TYPE :    ',iSpecies, cSpecies(iSpecies)
-!    do iAlt = 1, nAlts
-!        write(*,*) 'iAlt, RhoS(i-1), Left_M12, Right_M12, RhoS(i) = ', &
-!                 iAlt, RhoS(iAlt-1,iSpecies), RhoSLeft_M12(iAlt,iSpecies), &
-!          RhoSRight_M12(iAlt,iSpecies), RhoS(iAlt,iSpecies)  
-!    enddo 
-!    enddo 
-!
-!    write(*,*) '======= P12 FACEVALUES ========'
-!    do iSpecies = 1, nSpecies
-!       write(*,*) '  SPECIES TYPE :    ',iSpecies, cSpecies(iSpecies)
-!    do iAlt = 1, nAlts
-!        write(*,*) 'iAlt, RhoS(i-1), Left_P12, Right_P12, RhoS(i) = ', &
-!                 iAlt, RhoS(iAlt,iSpecies), RhoSLeft_P12(iAlt,iSpecies), &
-!          RhoSRight_P12(iAlt,iSpecies), RhoS(iAlt+1,iSpecies)  
-!    enddo 
-!    enddo 
-!
-!stop
-
-
-    do iSpecies = 1, nSpecies
-          !! Calculate the Left and Right Faces of the RhoS 
-           call calc_kt_facevalues(LogHydroPressureS(-1:nAlts+2,iSpecies), &
-                              LogHydroPressureSLeft_M12(1:nAlts,iSpecies), &
-                              LogHydroPressureSRight_M12(1:nAlts,iSpecies), &
-                               LogHydroPressureSLeft_P12(1:nAlts,iSpecies), &
-                              LogHydroPressureSRight_P12(1:nAlts,iSpecies) )
-
-           HydroPressureSLeft_M12(:,iSpecies) = &
-                 exp( LogHydroPressureSLeft_M12(:,iSpecies)) 
-          HydroPressureSRight_M12(:,iSpecies) = &
-                 exp(LogHydroPressureSRight_M12(:,iSpecies)) 
-
-           HydroPressureSLeft_P12(:,iSpecies) = &
-                 exp( LogHydroPressureSLeft_P12(:,iSpecies)) 
-          HydroPressureSRight_P12(:,iSpecies) = &
-                 exp(LogHydroPressureSRight_P12(:,iSpecies)) 
-
-    enddo 
-
-
-   do iSpecies = 1, nSpecies
-         !! Calculate the Left and Right Faces of the PressureS
-      call calc_kt_facevalues(LogPS(:,iSpecies), &
-          LogPressureSLeft_M12(:,iSpecies), LogPressureSRight_M12(:,iSpecies), &
-          LogPressureSLeft_P12(:,iSpecies), LogPressureSRight_P12(:,iSpecies) )
-
-      PressureSLeft_M12(:,iSpecies) = exp( LogPressureSLeft_M12(:,iSpecies)) 
-      PressureSRight_M12(:,iSpecies) = exp(LogPressureSRight_M12(:,iSpecies)) 
-
-      PressureSLeft_P12(:,iSpecies) = exp( LogPressureSLeft_P12(:,iSpecies)) 
-      PressureSRight_P12(:,iSpecies) = exp(LogPressureSRight_P12(:,iSpecies)) 
-
-   enddo 
-
-   do iSpecies = 1, nSpecies
-         !! Calculate the Left and Right Faces of the Var (Rho) 
-     call calc_kt_facevalues(VertVel(:,iSpecies), &
-                         VelLeft_M12(:,iSpecies), VelRight_M12(:,iSpecies), &
-                         VelLeft_P12(:,iSpecies), VelRight_P12(:,iSpecies) )
-   enddo 
-
-!    write(*,*) '======= M12 VELOCITY FACEVALUES ========'
-!    do iSpecies = 1, nSpecies
-!       write(*,*) '  SPECIES TYPE :    ',iSpecies, cSpecies(iSpecies)
-!    do iAlt = 1, nAlts
-!        write(*,*) 'iAlt, Vel(i-1), VelLeft_M12, VelRight_M12, Vel(i) = ', &
-!                 iAlt, VertVel(iAlt-1,iSpecies), VelLeft_M12(iAlt,iSpecies), &
-!          VelRight_M12(iAlt,iSpecies), VertVel(iAlt,iSpecies)  
-!    enddo 
-!    enddo 
-!
-!    write(*,*) '======= P12 VELOCITY FACEVALUES ========'
-!    do iSpecies = 1, nSpecies
-!       write(*,*) '  SPECIES TYPE :    ',iSpecies, cSpecies(iSpecies)
-!    do iAlt = 1, nAlts
-!        write(*,*) 'iAlt, Vel(i-1), VelLeft_P12, VelRight_P12, Vel(i) = ', &
-!                 iAlt, VertVel(iAlt-1,iSpecies), VelLeft_P12(iAlt,iSpecies), &
-!          VelRight_P12(iAlt,iSpecies), VertVel(iAlt,iSpecies)  
-!    enddo 
-!    enddo 
-
-
    RhoLeft_M12(:) = 0.0
    RhoRight_M12(:) = 0.0
 
@@ -1417,6 +1334,62 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
       RhoRight_P12(1:nAlts) = RhoRight_P12(1:nAlts) + &
                              RhoSRight_P12(1:nAlts,iSpecies)
    enddo 
+
+
+    do iSpecies = 1, nSpecies
+          !! Calculate the Left and Right Faces of the RhoS 
+           call calc_kt_facevalues(LogHydroRhoS(-1:nAlts+2,iSpecies), &
+                              LogHydroRhoSLeft_M12(1:nAlts,iSpecies), &
+                              LogHydroRhoSRight_M12(1:nAlts,iSpecies), &
+                               LogHydroRhoSLeft_P12(1:nAlts,iSpecies), &
+                              LogHydroRhoSRight_P12(1:nAlts,iSpecies) )
+
+           HydroRhoSLeft_M12(:,iSpecies) = &
+                 exp( LogHydroRhoSLeft_M12(:,iSpecies)) 
+          HydroRhoSRight_M12(:,iSpecies) = &
+                 exp(LogHydroRhoSRight_M12(:,iSpecies)) 
+
+           HydroRhoSLeft_P12(:,iSpecies) = &
+                 exp( LogHydroRhoSLeft_P12(:,iSpecies)) 
+          HydroRhoSRight_P12(:,iSpecies) = &
+                 exp(LogHydroRhoSRight_P12(:,iSpecies)) 
+
+    enddo 
+
+
+        !! Calculate the Left and Right Faces of the Pressure 
+    call calc_kt_facevalues(Temp(:), TempLeft_M12(:), TempRight_M12(:), &
+                                     TempLeft_P12(:), TempRight_P12(:) )
+
+    do iSpecies = 1, nSpecies
+       PressureSLeft_P12(1:nAlts,iSpecies) = &
+           (RhoSLeft_P12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempLeft_P12(1:nAlts)
+       HydroPressureSLeft_P12(1:nAlts,iSpecies) = &
+           (HydroRhoSLeft_P12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempLeft_P12(1:nAlts)
+       PressureSRight_P12(1:nAlts,iSpecies) = &
+           (RhoSRight_P12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempRight_P12(1:nAlts)
+       HydroPressureSRight_P12(1:nAlts,iSpecies) = &
+           (HydroRhoSRight_P12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempRight_P12(1:nAlts)
+
+       PressureSLeft_M12(1:nAlts,iSpecies) = &
+           (RhoSLeft_M12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempLeft_M12(1:nAlts)
+       HydroPressureSLeft_M12(1:nAlts,iSpecies) = &
+           (HydroRhoSLeft_M12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempLeft_M12(1:nAlts)
+       PressureSRight_M12(1:nAlts,iSpecies) = &
+           (RhoSRight_M12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempRight_M12(1:nAlts)
+       HydroPressureSRight_M12(1:nAlts,iSpecies) = &
+           (HydroRhoSRight_M12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempRight_M12(1:nAlts)
+
+    enddo 
+
+
+   do iSpecies = 1, nSpecies
+         !! Calculate the Left and Right Faces of the Var (Rho) 
+     call calc_kt_facevalues(VertVel(:,iSpecies), &
+                         VelLeft_M12(:,iSpecies), VelRight_M12(:,iSpecies), &
+                         VelLeft_P12(:,iSpecies), VelRight_P12(:,iSpecies) )
+   enddo 
+
 
    PLeft_M12(:) = 0.0
    PRight_M12(:) = 0.0
@@ -1558,10 +1531,47 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 !            PRight_P12(iAlt)
     enddo 
 
+!!!! Liou et al. [2006] suggest using the Enthalpy for the 
+!!!! numerical speed of sound.
+!!!! Calculate the Enthalpy at the cell faces here.
+!    write(*,*) 'ENTHALPY CALC:=============='
+    do iAlt = 1, nAlts 
+      do iSpecies = 1, nSpecies 
+
+          SpeciesLiouEnthalpyLeft_M12(iAlt,iSpecies) = &
+            0.5*( VelLeft_M12(iAlt,iSpecies)**2.0 + &
+                VelGDLeft_M12(iAlt,iEast_  )**2.0 + &
+                VelGDLeft_M12(iAlt,iNorth_ )**2.0 ) + &
+               (GammaLeft_M12(iAlt)/(GammaLeft_M12(iAlt) - 1.0))*&
+               PressureSLeft_M12(iAlt,iSpecies)/RhoSLeft_M12(iAlt,iSpecies)
+
+          SpeciesLiouEnthalpyRight_M12(iAlt,iSpecies) = &
+               0.5*( VelRight_M12(iAlt,iSpecies)**2.0 + &
+                   VelGDRight_M12(iAlt,iEast_  )**2.0 + &
+                   VelGDRight_M12(iAlt,iNorth_ )**2.0) + &
+               (GammaRight_M12(iAlt)/(GammaRight_M12(iAlt) - 1.0))*&
+               PressureSRight_M12(iAlt,iSpecies)/RhoSRight_M12(iAlt,iSpecies)
+
+
+          SpeciesLiouEnthalpyLeft_P12(iAlt,iSpecies) = &
+               0.5*(  VelLeft_P12(iAlt,iSpecies)**2.0 + &
+                    VelGDLeft_P12(iAlt,iEast_  )**2.0 + &
+                    VelGDLeft_P12(iAlt,iNorth_ )**2.0) + &
+               (GammaLeft_P12(iAlt)/(GammaLeft_P12(iAlt) - 1.0))*&
+               PressureSLeft_P12(iAlt,iSpecies)/RhoSLeft_P12(iAlt,iSpecies)
+
+          SpeciesLiouEnthalpyRight_P12(iAlt,iSpecies) = &
+               0.5*(  VelRight_P12(iAlt,iSpecies)**2.0 + &
+                    VelGDRight_P12(iAlt,iEast_  )**2.0 + &
+                    VelGDRight_P12(iAlt,iNorth_ )**2.0) + &
+               (GammaRight_P12(iAlt)/(GammaRight_P12(iAlt) - 1.0))*&
+               PressureSRight_P12(iAlt,iSpecies)/RhoSRight_P12(iAlt,iSpecies)
+
+      enddo !iSpecies = 1, nSpecies 
+    enddo !iAlt = 1, nAlts 
+
 !!! Liou Methodology
-
    do iAlt = 1, nAlts
-
        SubCs = & 
          sqrt(2.0*( (GammaLeft_M12(iAlt) - 1.0 )/(GammaLeft_M12(iAlt) + 1.0)) *&
          LiouEnthalpyLeft_M12(iAlt) )
@@ -1596,12 +1606,49 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
    enddo 
 
+   !!! Liou Methodology
+   do iAlt = 1, nAlts
+     do iSpecies = 1, nSpecies
+       SubCs = & 
+         sqrt(2.0*( (GammaLeft_M12(iAlt) - 1.0 )/(GammaLeft_M12(iAlt) + 1.0)) *&
+         SpeciesLiouEnthalpyLeft_M12(iAlt,iSpecies) )
+         SpeciesLiouCSLeft_M12(iAlt,iSpecies) = & 
+             (SubCs**2.0)/max(SubCs, VelLeft_M12(iAlt,iSpecies))
+
+       SubCs = & 
+         sqrt(2.0*( (GammaRight_M12(iAlt) - 1.0 )/(GammaRight_M12(iAlt) + 1.0)) *&
+         SpeciesLiouEnthalpyRight_M12(iAlt,iSpecies) )
+         SpeciesLiouCSRight_M12(iAlt,iSpecies) = & 
+             (SubCs**2.0)/max(SubCs, VelRight_M12(iAlt,iSpecies))
+
+       SpeciesInterfaceCS_M12(iAlt,iSpecies) = &
+           min(SpeciesLiouCSLeft_M12(iAlt,iSpecies), SpeciesLiouCSRight_M12(iAlt,iSpecies))
+
+
+       SubCs = & 
+         sqrt(2.0*( (GammaLeft_P12(iAlt) - 1.0 )/(GammaLeft_P12(iAlt) + 1.0)) *&
+         SpeciesLiouEnthalpyLeft_P12(iAlt,iSpecies) )
+         SpeciesLiouCSLeft_P12(iAlt,iSpecies) = & 
+             (SubCs**2.0)/max(SubCs, VelLeft_P12(iAlt,iSpecies))
+
+       SubCs = & 
+         sqrt(2.0*( (GammaRight_P12(iAlt) - 1.0 )/(GammaRight_P12(iAlt) + 1.0)) *&
+         SpeciesLiouEnthalpyRight_P12(iAlt,iSpecies) )
+         SpeciesLiouCSRight_P12(iAlt,iSpecies) = & 
+             (SubCs**2.0)/max(SubCs, VelRight_P12(iAlt,iSpecies))
+
+       SpeciesInterfaceCS_P12(iAlt,iSpecies) = &
+           min(SpeciesLiouCSLeft_P12(iAlt,iSpecies), SpeciesLiouCSRight_P12(iAlt,iSpecies))
+
+     enddo !iSpecies = 1, nSpecies
+   enddo  ! iAlt
+
    do iSpecies = 1, nSpecies
      do iAlt = 1, nAlts
         ! Implement Thornber Entropy Correction at low Mach Numbers
         ! see. Thornber et al. [2008], J. Comp. Phys, 227, 4873-4894
         ! Implementation here taken from Houim et al. [2011], J Comp.Phys, 230, 8527-8553
-        CBar = InterfaceCS_P12(iAlt)
+        CBar = SpeciesInterfaceCS_P12(iAlt,iSpecies)
           VL =     VelLeft_P12(iAlt,iSpecies)
           VR =    VelRight_P12(iAlt,iSpecies)
           ML = sqrt(VL*VL)/CBar
@@ -1610,7 +1657,7 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
            VelLeft_P12(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VL - VR)
           VelRight_P12(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VR - VL)
 
-        CBar = InterfaceCS_M12(iAlt)
+        CBar = SpeciesInterfaceCS_M12(iAlt,iSpecies)
           VL =     VelLeft_M12(iAlt,iSpecies)
           VR =    VelRight_M12(iAlt,iSpecies)
           ML = sqrt(VL*VL)/CBar
@@ -1652,6 +1699,10 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   do iAlt = 1, nAlts 
      MeanCS_P12(iAlt) = InterfaceCS_P12(iAlt)
      MeanCS_M12(iAlt) = InterfaceCS_M12(iAlt)
+     do iSpecies = 1, nSpecies 
+        SpeciesMeanCS_P12(iAlt,iSpecies) = SpeciesInterfaceCS_P12(iAlt,iSpecies)
+        SpeciesMeanCS_M12(iAlt,iSpecies) = SpeciesInterfaceCS_M12(iAlt,iSpecies)
+     enddo !iAlt = 1, nAlts 
   enddo 
 
 !!! Next, define local mach numbers at the interfaces
@@ -1660,16 +1711,16 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
      do iSpecies = 1, nSpecies
 
         MLeft_M12(iAlt,iSpecies) = &
-           VelLeft_M12(iAlt,iSpecies)/MeanCS_M12(iAlt)
+           VelLeft_M12(iAlt,iSpecies)/SpeciesMeanCS_M12(iAlt,iSpecies)
 
         MRight_M12(iAlt,iSpecies) = &
-           VelRight_M12(iAlt,iSpecies)/MeanCS_M12(iAlt)
+           VelRight_M12(iAlt,iSpecies)/SpeciesMeanCS_M12(iAlt,iSpecies)
 
         MLeft_P12(iAlt,iSpecies) = &
-           VelLeft_P12(iAlt,iSpecies)/MeanCS_P12(iAlt)
+           VelLeft_P12(iAlt,iSpecies)/SpeciesMeanCS_P12(iAlt,iSpecies)
 
         MRight_P12(iAlt,iSpecies) = &
-           VelRight_P12(iAlt,iSpecies)/MeanCS_P12(iAlt)
+           VelRight_P12(iAlt,iSpecies)/SpeciesMeanCS_P12(iAlt,iSpecies)
     
      enddo 
    enddo 
@@ -1698,43 +1749,37 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
       enddo 
      enddo 
 
-     ! Establish Mach Number Scaling Functions g(M)
-     ! We specify a g(M) such that it goes away as |M|->1
-     ! g(M) ~ M^2 as M -> 0.0
-     Kp(1:nSpecies) = 0.50             !! Ullrich et al. [2011]
-     Ku(1:nSpecies) = 1.0             !! Ullrich et al. [2011]
-     do iAlt = 1, nAlts
-        do iSpecies = 1, nSpecies
-   !
-           ! Note that MZero is scaled to be within [0,1]
-           ! Specify pressure correction fluxes (LiouKpS)
-           MachScaling = MZero_P12(iAlt,iSpecies)**2.0
-           LogKpS_P12(iAlt,iSpecies) = MachScaling*Kp(iSpecies)
+    ! Create Mach-Scaling Pressure-Correction Functions
+    ! Establish Mach Number Scaling Functions g(M)
+    ! We specify a g(M) such that it goes away as |M|->1
+    ! g(M) ~ M^2 as M -> 0.0
+    Kp(1:nSpecies) = 0.10             !! Ullrich et al. [2011]
+    Ku(1:nSpecies) = 0.25             !! Ullrich et al. [2011]
+    do iAlt = 1, nAlts
+       do iSpecies = 1, nSpecies
+       ! Note that MZero is scaled to be within [0,1]
+       ! Specify pressure correction fluxes (LiouKpS)
+       ! Note: MZero -> [0,1]
+       ! Note: M2Zero  = (MZero)^2.0-> [0,1]
+       ! As M -> 0.0, MachScaling ~ M^2 - M^4 ~ M^2 -> Varies like a pressure at Low Mach
+       ! As M >> 1.0, MZero = 1.0, MachScaling ~ 1 - 1 -> 0.0
+       !    This shuts our correction down at high mach number
+       ! Mathematically, we want AUSM+-up Numerical Flux(Mp):
+       !        Mp ~ d(P)*/(rho*cs*(fa*cs + zeta*dz/dt)) ~ dP/rho*cs^2
 
-           MachScaling = MZero_M12(iAlt,iSpecies)**2.0
-           LogKpS_M12(iAlt,iSpecies) = MachScaling*Kp(iSpecies)
-           ! Examining MPress reveals that as M ->0 .0 this scaling follows
-           ! Mp ~ d(P)*/(rho*cs*(fa*cs + zeta*dz/dt)) ~ dP/rho*cs^2
+          MachScaling = MZero_P12(iAlt,iSpecies)**2.0
+          LiouKpS_P12(iAlt,iSpecies) = MachScaling*Kp(iSpecies)
+          MachScaling = MZero_M12(iAlt,iSpecies)**2.0
+          LiouKpS_M12(iAlt,iSpecies) = MachScaling*Kp(iSpecies)
 
-           MachScaling = MZero_P12(iAlt,iSpecies)
-           LogKuS_P12(iAlt,iSpecies) = MachScaling*Ku(iSpecies)
-
-           MachScaling = MZero_M12(iAlt,iSpecies)
-           LogKuS_M12(iAlt,iSpecies) = MachScaling*Ku(iSpecies)
+          ! Note that MZero ranges from [0, 1.0] (cap at 1.0)
+          MachScaling = 1.0 - MZero_P12(iAlt,iSpecies)
+          LiouKuS_P12(iAlt,iSpecies) = MachScaling*Ku(iSpecies)
+          MachScaling = 1.0 - MZero_M12(iAlt,iSpecies)
+          LiouKuS_M12(iAlt,iSpecies) = MachScaling*Ku(iSpecies)
        enddo 
     enddo 
 
-
-     do iSpecies = 1, nSpecies
-      do iAlt = 1, nAlts 
-
-        FA_M12(iAlt,iSpecies) = &
-               MZero_M12(iAlt,iSpecies)*(2.0 - MZero_M12(iAlt,iSpecies))
-        FA_P12(iAlt,iSpecies) = &
-               MZero_P12(iAlt,iSpecies)*(2.0 - MZero_P12(iAlt,iSpecies))
-
-      enddo 
-     enddo 
 
    do iSpecies = 1, nSpecies
      do iAlt = 1, nAlts
@@ -1819,54 +1864,52 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   do iSpecies = 1, nSpecies
     do iAlt = 1, nAlts 
 
-       !ModifiedZeta(iAlt,iSpecies) = 0.0
-       ModifiedZeta(iAlt,iSpecies) = 0.0
-
+       ! Note that MPress varies as Kp*(g(M))* dPs/(rhos*as^2)
+       ! g(M) is a "shut off" for M > 1
+       ! in all cases rhos*as^2 ~ rhos*(Gamma*Ps/rhos) ~ Gamma*Ps 
+       ! now:  In the vertical direction
+       !
+       ! dPs/Ps ~ (1/Ps)*(dP/dr)*dr ~ -rhos*(grav)/(ns*kb*T)*dr  
+       ! Thus as M -> 0 and P approaches hydrostatic
+       ! Therefore MPress ~ Kp*ms*g*dr/(kb*T) (no units)
+       ! But we want this to vary as M^2 as a pressure flux as M->0
+       ! So we want APC Scalar as f(M) ~ Ms^2
+       ! Mp_APC ~ f(M)*Kp*dPs/(rhos*cs^2) -> Ms^2*Kp*(dr/Hs)
 !!!! Hydrostatic Species Use This one
-
-       MPress_P12(iAlt,iSpecies) = &
-          LiouKpS_P12(iAlt,iSpecies)*&
-          (  (PressureSRight_P12(iAlt, iSpecies) - &
-          HydroPressureSRight_P12(iAlt,iSpecies) ) - &
-          (PressureSLeft_P12(iAlt, iSpecies) - &
-          HydroPressureSLeft_P12(iAlt,iSpecies) ) )/ &
-          ( MeanRhoS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
-          (FA_P12(iAlt,iSpecies)*MeanCS_P12(iAlt) + &
-           ModifiedZeta(iAlt,iSpecies)*dAlt_F(iAlt+1)/DtIn)  ) 
-
        MPress_M12(iAlt,iSpecies) = &
-          LiouKpS_M12(iAlt,iSpecies)*&
+          LiouKpS_M12(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
          ((PressureSRight_M12(iAlt, iSpecies) - &
          HydroPressureSRight_M12(iAlt,iSpecies) ) - &
          (PressureSLeft_M12(iAlt, iSpecies) - &
           HydroPressureSLeft_M12(iAlt,iSpecies) ) )/ &
-         ( MeanRhoS_M12(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
-         (FA_M12(iAlt,iSpecies)*MeanCS_M12(iAlt) + &
-          ModifiedZeta(iAlt,iSpecies)*dAlt_F(iAlt)/DtIn)  ) 
+         ( MeanRhoS_M12(iAlt,iSpecies)*SpeciesMeanCS_M12(iAlt,iSpecies)*SpeciesMeanCS_M12(iAlt,iSpecies) ) 
+
+       MPress_P12(iAlt,iSpecies) = &
+          LiouKpS_P12(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
+          (  (PressureSRight_P12(iAlt, iSpecies) - &
+          HydroPressureSRight_P12(iAlt,iSpecies) ) - &
+          (PressureSLeft_P12(iAlt, iSpecies) - &
+          HydroPressureSLeft_P12(iAlt,iSpecies) ) )/ &
+         ( MeanRhoS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies) ) 
 
 !!!!! Non-Hydrostatic Species Should use this version
 
        if (.not. SubtractHydrostatic(iAlt,iSpecies)) then
 
        MPress_P12(iAlt,iSpecies) = &
-          LiouKpS_P12(iAlt,iSpecies)*&
+          LiouKpS_P12(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
           (PressureSRight_P12(iAlt, iSpecies) - PressureSLeft_P12(iAlt,iSpecies) )/&
-          ( MeanRhoS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
-          (FA_P12(iAlt,iSpecies)*MeanCS_P12(iAlt) + &
-          ModifiedZeta(iAlt,iSpecies)*dAlt_F(iAlt+1)/DtIn)  ) 
+         ( MeanRhoS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies) ) 
 
        MPress_M12(iAlt,iSpecies) = &
-          LiouKpS_M12(iAlt,iSpecies)*&
+          LiouKpS_M12(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
          (PressureSRight_M12(iAlt, iSpecies) - PressureSLeft_M12(iAlt,iSpecies) )/&
-         ( MeanRhoS_M12(iAlt,iSpecies)*MeanCS_M12(iAlt)*&
-         (FA_M12(iAlt,iSpecies)*MeanCS_M12(iAlt) + &
-          ModifiedZeta(iAlt,iSpecies)*dAlt_F(iAlt)/DtIn)  ) 
+         ( MeanRhoS_M12(iAlt,iSpecies)*SpeciesMeanCS_M12(iAlt,iSpecies)*SpeciesMeanCS_M12(iAlt,iSpecies) ) 
 
 
         endif 
      enddo ! iSpecies
    enddo ! iAlt
-
 
 
    do iAlt = 1, nAlts 
@@ -1877,14 +1920,14 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
                     - MPress_M12(iAlt,iSpecies)
 
           LiouNumericalVelocity_M12(iAlt,iSpecies) = &
-                   MeanCS_M12(iAlt)*InterfaceMach_M12(iAlt,iSpecies) 
+                   SpeciesMeanCS_M12(iAlt,iSpecies)*InterfaceMach_M12(iAlt,iSpecies) 
 
           InterfaceMach_P12(iAlt,iSpecies) =  &
                  MF4P_Left_P12(iAlt,iSpecies) + MF4N_Right_P12(iAlt,iSpecies) &
                     - MPress_P12(iAlt,iSpecies)
  
           LiouNumericalVelocity_P12(iAlt,iSpecies) = &
-                   MeanCS_P12(iAlt)*InterfaceMach_P12(iAlt,iSpecies) 
+                   SpeciesMeanCS_P12(iAlt,iSpecies)*InterfaceMach_P12(iAlt,iSpecies) 
       enddo ! iSpecies 
    enddo  ! iAlt
 
@@ -1893,6 +1936,8 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
       NumericalVelocity_P12(1:nAlts,1:nSpecies) = &
   LiouNumericalVelocity_P12(1:nAlts,1:nSpecies)
+
+
 !! NUMERICAL PRESSURE
   do iSpecies = 1, nSpecies
        do iAlt = 1, nAlts
@@ -1900,14 +1945,14 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
              NumericalPressure_P12(iAlt,iSpecies) = &
                   (MeanPressureS_P12(iAlt,iSpecies) - &
               MeanHydroPressureS_P12(iAlt,iSpecies) )&
-                - 0.5*LiouKuS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+                - 0.5*LiouKuS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*&
                ( (RhoSRight_P12(iAlt,iSpecies) )*VelRight_P12(iAlt,iSpecies) - &
                   (RhoSLeft_P12(iAlt,iSpecies) )* VelLeft_P12(iAlt,iSpecies) )
 
              NumericalPressure_M12(iAlt,iSpecies) = &
                (MeanPressureS_M12(iAlt,iSpecies) - &
            MeanHydroPressureS_M12(iAlt,iSpecies) )&
-                - 0.5*LiouKuS_M12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+                - 0.5*LiouKuS_M12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*&
                ( (RhoSRight_M12(iAlt,iSpecies) )*VelRight_M12(iAlt,iSpecies) - &
                   (RhoSLeft_M12(iAlt,iSpecies) )* VelLeft_M12(iAlt,iSpecies) )
 
@@ -1916,13 +1961,13 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
              NumericalPressure_P12(iAlt,iSpecies) = &
                (MeanPressureS_P12(iAlt,iSpecies) )&
-                - 0.5*LiouKuS_P12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+                - 0.5*LiouKuS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*&
                ( (RhoSRight_P12(iAlt,iSpecies) )*VelRight_P12(iAlt,iSpecies) - &
                   (RhoSLeft_P12(iAlt,iSpecies) )* VelLeft_P12(iAlt,iSpecies) )
 
              NumericalPressure_M12(iAlt,iSpecies) = &
                (MeanPressureS_M12(iAlt,iSpecies) )&
-                - 0.5*LiouKuS_M12(iAlt,iSpecies)*MeanCS_P12(iAlt)*&
+                - 0.5*LiouKuS_M12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*&
                ( (RhoSRight_M12(iAlt,iSpecies) )*VelRight_M12(iAlt,iSpecies) - &
                   (RhoSLeft_M12(iAlt,iSpecies) )* VelLeft_M12(iAlt,iSpecies) )
 
@@ -1930,7 +1975,6 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
            
        enddo !!iAlt = 1, nAlts
   enddo !!! nSpecies
-
 
 
   do iSpecies = 1, nSpecies

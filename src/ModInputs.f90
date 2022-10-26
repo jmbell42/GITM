@@ -48,6 +48,7 @@ module ModInputs
   character (len=iCharLen_) :: AuroralModel
 
   logical :: UseCCMCFileName = .false.
+  logical :: IsPhotoChemical(1:nSpecies) = .false.
 
   logical :: UseSecondsInFilename = .true.    !xianjing
 

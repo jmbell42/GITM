@@ -452,6 +452,18 @@ subroutine set_inputs
               IsDone = .true.
            endif
 
+        ! Global Settings for Photochemical Species that
+        ! Transported
+        case ("#PHOTOCHEMICAL")
+           do i=1,nSpecies
+              call read_in_logical(IsPhotoChemical(i), iError)
+              if (iError /= 0) exit  ! Assume that 
+           enddo
+           if (iError /= 0 .and. iProc == 0) then
+              write(*,*) 'USER WARNING: Default settings are IsPhotoChemical = false :'
+           endif
+           iError = 0
+
         ! For WP-GITM
         case ("#USEBCPERTURBATION")
            call read_in_logical(UseBcPerturbation,iError)
