@@ -461,6 +461,11 @@ subroutine set_inputs
            enddo
            if (iError /= 0 .and. iProc == 0) then
               write(*,*) 'USER WARNING: Default settings are IsPhotoChemical = false :'
+              write(*,*) 'Current Settings are as follows: '
+              write(*,*) 'Species Number    Species name   IsPhotoChemical '
+              do iSpecies = 1, nSpecies
+                 write(*,*)  iSpecies, cSpecies(iSpecies), IsPhotoChemical(iSpecies)
+              enddo !iSpecies = 1, nSpecies
            endif
            iError = 0
 
