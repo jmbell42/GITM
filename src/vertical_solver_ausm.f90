@@ -1520,21 +1520,24 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
   do iSpecies = 1, nSpecies
      do iAlt = 0, nAlts 
-        if (NumericalVertVelS(iAlt,iSpecies) .ge. 0.0) then 
-            RhoSFlux(iAlt,iSpecies) = &
-               RhoSLeft(iAlt,iSpecies)*NumericalVertVelS(iAlt,iSpecies)
 
-            MomentumSFlux(iAlt,iSpecies) = &
-                RhoSLeft(iAlt,iSpecies)*VertVelSLeft(iAlt,iSpecies)*&
-                NumericalVertVelS(iAlt,iSpecies) 
-        else
-            RhoSFlux(iAlt,iSpecies) = &
-               RhoSRight(iAlt,iSpecies)*NumericalVertVelS(iAlt,iSpecies)
+        ! Note if V > 0.0, then |V| =  V:  (1/2)*(V + |V|) = V, (1/2)*(V - |V|) = 0.0
+        ! Note if V < 0.0, then |V| = -V:  (1/2)*(V + |V|) = V, (1/2)*(V - |V|) = 0.0
+        RhoSFlux(iAlt,iSpecies) = &
+           0.5* RhoSLeft(iAlt,iSpecies)*&
+                (     NumericalVertVelS(iAlt,iSpecies) +  & 
+                  dabs(NumericalVertVelS(iAlt,iSpecies)) ) + &
+           0.5*RhoSRight(iAlt,iSpecies)*&
+                (     NumericalVertVelS(iAlt,iSpecies) -  & 
+                  dabs(NumericalVertVelS(iAlt,iSpecies)) ) 
 
-            MomentumSFlux(iAlt,iSpecies) = &
-                RhoSRight(iAlt,iSpecies)*VertVelSRight(iAlt,iSpecies)*&
-                NumericalVertVelS(iAlt,iSpecies) 
-        endif
+        MomentumSFlux(iAlt,iSpecies) = &
+           0.5* RhoSLeft(iAlt,iSpecies)*VertVelSLeft(iAlt,iSpecies)*&
+                (     NumericalVertVelS(iAlt,iSpecies) +    &
+                  dabs(NumericalVertVelS(iAlt,iSpecies)) ) + &
+           0.5*RhoSRight(iAlt,iSpecies)*VertVelSRight(iAlt,iSpecies)*&
+                (     NumericalVertVelS(iAlt,iSpecies) -    &
+                  dabs(NumericalVertVelS(iAlt,iSpecies)) ) 
      enddo 
   enddo 
 
@@ -1548,23 +1551,39 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   enddo 
 
   do iAlt = 0, nAlts 
-     if (BulkNumericalVertVel(iAlt) .ge. 0.0) then 
-        EnergyFlux(iAlt) = &
-          ( EnergyLeft(iAlt) + PressureLeft(iAlt) ) &
-            *BulkNumericalVertVel(iAlt) 
+     EnergyFlux(iAlt) = &
+        0.5*( EnergyLeft(iAlt) + PressureLeft(iAlt) )* &
+            ( BulkNumericalVertVel(iAlt) +  &
+          abs(BulkNumericalVertVel(iAlt)) ) + & 
+        0.5*( EnergyRight(iAlt) + PressureRight(iAlt) )* &
+            ( BulkNumericalVertVel(iAlt) -  &
+          abs(BulkNumericalVertVel(iAlt)) ) 
 
-        MomentumFlux(iAlt,1:3) = &
-             RhoLeft(iAlt)*VelGDLeft(iAlt,1:3)*&
-             BulkNumericalVertVel(iAlt) 
-     else
-        EnergyFlux(iAlt) = &
-          ( EnergyRight(iAlt) + PressureRight(iAlt) ) &
-            *BulkNumericalVertVel(iAlt) 
+     MomentumFlux(iAlt,1:3) = &
+        0.5*( RhoLeft(iAlt)*VelGDLeft(iAlt,1:3))*&
+            ( BulkNumericalVertVel(iAlt) +  &
+          abs(BulkNumericalVertVel(iAlt)) ) + & 
+        0.5*( RhoRight(iAlt)*VelGDRight(iAlt,1:3))*&
+            ( BulkNumericalVertVel(iAlt) -  &
+          abs(BulkNumericalVertVel(iAlt)) ) 
 
-        MomentumFlux(iAlt,1:3) = &
-             RhoRight(iAlt)*VelGDRight(iAlt,1:3)*&
-             BulkNumericalVertVel(iAlt) 
-     endif
+     !if (BulkNumericalVertVel(iAlt) .ge. 0.0) then 
+     !   EnergyFlux(iAlt) = &
+     !     ( EnergyLeft(iAlt) + PressureLeft(iAlt) ) &
+     !       *BulkNumericalVertVel(iAlt) 
+!
+!        MomentumFlux(iAlt,1:3) = &
+!             RhoLeft(iAlt)*VelGDLeft(iAlt,1:3)*&
+!             BulkNumericalVertVel(iAlt) 
+!     else
+!        EnergyFlux(iAlt) = &
+!          ( EnergyRight(iAlt) + PressureRight(iAlt) ) &
+!            *BulkNumericalVertVel(iAlt) 
+!
+!        MomentumFlux(iAlt,1:3) = &
+!             RhoRight(iAlt)*VelGDRight(iAlt,1:3)*&
+!             BulkNumericalVertVel(iAlt) 
+!     endif
   enddo 
 
   ! Define Cell Volumes and radial Areas
