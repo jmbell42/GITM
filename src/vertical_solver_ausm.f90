@@ -756,15 +756,17 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
            RhoS(-1:nAlts+2, 1:nSpecies) - &
       HydroRhoS(-1:nAlts+2,1:nSpecies)
 
-  do iAlt = -1, nAlts + 2
-    do iSpecies = 1, nSpecies
-      if ( abs(DeviationRhoSRatio(iAlt,iSpecies)) .gt. 1.0) then
-          SubtractHydrostatic(iAlt,iSpecies) = .false.
-      else
-          SubtractHydrostatic(iAlt,iSpecies) = .true.
-      endif 
-    enddo 
-  enddo 
+  SubtractHydrostatic = .true.
+!
+!  do iAlt = -1, nAlts + 2
+!    do iSpecies = 1, nSpecies
+!      if ( abs(DeviationRhoSRatio(iAlt,iSpecies)) .gt. 1.0) then
+!          SubtractHydrostatic(iAlt,iSpecies) = .false.
+!      else
+!          SubtractHydrostatic(iAlt,iSpecies) = .true.
+!      endif 
+!    enddo 
+!  enddo 
 
   NewRho = Rho
   NewPress = Press
@@ -772,8 +774,7 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
   ! Call the AUSM Solvers
   call calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRhoS, &
         HydroPressure,  HydroRho, AUSMRhoSFluxes,AUSMMomentumSFluxes, &
-        AUSMTotalEnergyFluxes, AUSMMomentumFluxes, RadialDistance_C,  &
-        SubtractHydrostatic)
+        AUSMTotalEnergyFluxes, AUSMMomentumFluxes, SubtractHydrostatic)
 
   AmpSP = (1.0/(10.0*DtIn))
   kSP = nAltsSponge + 1
@@ -1071,9 +1072,8 @@ end subroutine calc_facevalues_alts_ausm
 
 
 subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRhoS, &
-            HydroPressure, HydroRho, RhoSFlux, MomentumSFlux, &
-            EnergyFlux, MomentumFlux, &
-            RadDist, SubtractHydrostatic)
+            HydroPressure, HydroRho, DivRhoSFlux, DivMomentumSFlux, &
+            DivEnergyFlux, DivMomentumFlux, SubtractHydrostatic)
 
   use ModSizeGitm
   use ModVertical, only : dAlt_C, cMax, VertVel, Gamma_1D, &
@@ -1091,1035 +1091,521 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
 ! Passed from Vertical_Solver In
   real, intent(in) :: DtIn
-  real, intent(in) :: RhoS(-1:nAlts+2, 1:nSpecies)
-  real, intent(in) :: PressureS(-1:nAlts+2,1:nSpecies)
-  real, intent(in) :: HydroRhoS(-1:nAlts+2, 1:nSpecies)
+  real, intent(in) ::           RhoS(-1:nAlts+2, 1:nSpecies)
+  real, intent(in) ::      PressureS(-1:nAlts+2,1:nSpecies)
+  real, intent(in) ::      HydroRhoS(-1:nAlts+2, 1:nSpecies)
   real, intent(in) :: HydroPressureS(-1:nAlts+2,1:nSpecies)
-  real, intent(in) :: HydroRho(-1:nAlts+2) 
-  real, intent(in) :: HydroPressure(-1:nAlts+2)
-  real, intent(out):: RhoSFlux(1:nAlts,1:nSpecies)
-  real, intent(out):: MomentumSFlux(1:nAlts,1:nSpecies)
-  real, intent(out):: EnergyFlux(1:nAlts)
-  real, intent(out):: MomentumFlux(1:nAlts,1:3)
-  real, intent(in) :: RadDist(-1:nAlts+2)
+  real, intent(in) ::       HydroRho(-1:nAlts+2) 
+  real, intent(in) ::  HydroPressure(-1:nAlts+2)
+  real, intent(out)::      DivRhoSFlux(1:nAlts,1:nSpecies)
+  real, intent(out):: DivMomentumSFlux(1:nAlts,1:nSpecies)
+  real, intent(out)::    DivEnergyFlux(1:nAlts)
+  real, intent(out)::  DivMomentumFlux(1:nAlts,1:3)
   logical, intent(in) :: SubtractHydrostatic(-1:nAlts+2,1:nSpecies)
-
-  real, dimension(1:nAlts,1:nSpecies) :: RhoSLeft_M12, RhoSRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: RhoSLeft_P12, RhoSRight_P12
 
   real, dimension(-1:nAlts+2, 1:nSpecies) :: LogRhoS
   real, dimension(-1:nAlts+2, 1:nSpecies) :: LogPS
 
-  real, dimension(1:nAlts,1:nSpecies) :: LogRhoSLeft_M12, LogRhoSRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: LogRhoSLeft_P12, LogRhoSRight_P12
-
-  real, dimension( 1:nAlts  ,1:nIonsAdvect) :: RhoILeft_M12, RhoIRight_M12
-  real, dimension( 1:nAlts  ,1:nIonsAdvect) :: RhoILeft_P12, RhoIRight_P12
   real, dimension(-1:nAlts+2,1:nIonsAdvect) :: LogRhoI
-  real, dimension( 1:nAlts  ,1:nIonsAdvect) :: LogRhoILeft_M12, LogRhoIRight_M12
-  real, dimension( 1:nAlts  ,1:nIonsAdvect) :: LogRhoILeft_P12, LogRhoIRight_P12
-
-
-  real, dimension(1:nAlts,1:nSpecies) :: PressureSLeft_M12, PressureSRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: PressureSLeft_P12, PressureSRight_P12
-
-  real, dimension(1:nAlts,1:nSpecies) :: LogPressureSLeft_M12, LogPressureSRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: LogPressureSLeft_P12, LogPressureSRight_P12
-
-  real, dimension(1:nAlts,1:nSpecies) :: VelLeft_M12, VelRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: VelLeft_P12, VelRight_P12
-
-  real, dimension(1:nAlts,3) :: VelGDLeft_M12, VelGDRight_M12
-  real, dimension(1:nAlts,3) :: VelGDLeft_P12, VelGDRight_P12
-
   real, dimension(1:nAlts,3) :: IVelLeft_M12, IVelRight_M12
   real, dimension(1:nAlts,3) :: IVelLeft_P12, IVelRight_P12
-
-  real, dimension(1:nAlts) :: PLeft_M12, PRight_M12
-  real, dimension(1:nAlts) :: PLeft_P12, PRight_P12
-
-  real, dimension(1:nAlts) :: GammaLeft_M12, GammaRight_M12
-  real, dimension(1:nAlts) :: GammaLeft_P12, GammaRight_P12
-
-  real, dimension(1:nAlts) :: TempLeft_M12, TempRight_M12
-  real, dimension(1:nAlts) :: TempLeft_P12, TempRight_P12
-
-  real, dimension(1:nAlts) :: ELeft_M12, ERight_M12
-  real, dimension(1:nAlts) :: ELeft_P12, ERight_P12
-
-  real, dimension(1:nAlts) :: RhoLeft_M12, RhoRight_M12
-  real, dimension(1:nAlts) :: RhoLeft_P12, RhoRight_P12
-
-  real, dimension(1:nAlts) :: CSLeft_M12, CSRight_M12
-  real, dimension(1:nAlts) :: CSLeft_P12, CSRight_P12
-
-  real, dimension(1:nAlts,1:nSpecies) :: RhoSFlux_M12, RhoSFlux_P12
-  real, dimension(1:nAlts,1:nSpecies) :: MomentumSFlux_M12, MomentumSFlux_P12
-  real, dimension(1:nAlts,3) :: Momentum_M12, Momentum_P12
   real, dimension(1:nAlts,1:nIonsAdvect) :: RhoIFlux_M12, RhoIFlux_P12
-
-  real, dimension(1:nAlts) :: EnergyFlux_M12, EnergyFlux_P12
 
 !!! Hydrostatic Variables
   real, dimension(-1:nAlts+2,1:nSpecies) :: LogHydroPressureS
-  real, dimension(1:nAlts,1:nSpecies) :: LogHydroPressureSLeft_M12, &
-                                         LogHydroPressureSRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: LogHydroPressureSLeft_P12, &
-                                         LogHydroPressureSRight_P12
-  real, dimension(1:nAlts,1:nSpecies) :: HydroPressureSLeft_M12, &
-                                        HydroPressureSRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: HydroPressureSLeft_P12, &
-                                         HydroPressureSRight_P12
-
   real, dimension(-1:nAlts+2,1:nSpecies) :: LogHydroRhoS
-  real, dimension(1:nAlts,1:nSpecies) :: LogHydroRhoSLeft_M12, &
-                                         LogHydroRhoSRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: LogHydroRhoSLeft_P12, &
-                                         LogHydroRhoSRight_P12
-  real, dimension(1:nAlts,1:nSpecies) :: HydroRhoSLeft_M12, &
-                                        HydroRhoSRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: HydroRhoSLeft_P12, &
-                                         HydroRhoSRight_P12
-
-  real, dimension(1:nAlts,1:nSpecies) :: MeanHydroPressureS_M12
-  real, dimension(1:nAlts,1:nSpecies) :: MeanHydroPressureS_P12
 
   real :: SubCs
   integer :: iSpecies, iAlt, iDim
   !------------------------------------------------------------
 
   ! ==================== AUSM Flux Variables
-
-  real, dimension( 1:nAlts,1:nSpecies) :: NumericalVelocity_P12, &
-                                          NumericalVelocity_M12
-  real, dimension( 1:nAlts,1:nSpecies) :: NumericalPressure_P12, &
-                                          NumericalPressure_M12   
-
-  real, dimension( 1:nAlts) :: BulkNumericalVelocity_P12, &
-                               BulkNumericalVelocity_M12    
   real, dimension( 1:nAlts) :: BulkIVel_P12, BulkIVel_M12    
-  real, dimension( 1:nAlts) :: MeanCS_P12, MeanCS_M12    
-
-  real, dimension( 1:nAlts, 1:nSpecies) :: MeanPressureS_P12,&
-                                           MeanPressureS_M12    
-  real, dimension( 1:nAlts, 1:nSpecies) :: MeanRhoS_P12, &
-                                           MeanRhoS_M12    
-
   real :: Kp(1:nSpecies), Ku(1:nSpecies)
-  real :: LiouKp, LiouKu
 
-  real :: LiouKpS(1:nAlts,1:nSpecies), LiouKuS(1:nAlts,1:nSpecies)
-  real :: MaxKpS(1:nAlts,1:nSpecies), MaxKuS(1:nAlts,1:nSpecies)
-  real :: MinKpS(1:nAlts,1:nSpecies), MinKuS(1:nAlts,1:nSpecies)
-  real :: KpWidth, KpAltMidPoint
-  integer :: AltIndex
-
-  real, dimension( 1:nAlts) :: LeftRadius, RightRadius    
   real, dimension( 1:nAlts) :: AreaFunction_P12, AreaFunction_M12    
   real, dimension( 1:nAlts) :: LocalCellVolume
 
-!!!!!! ====================  JMB:  Liou Stuff ===============================
-  real, dimension(1:nAlts) :: LiouCSLeft_M12, LiouCSRight_M12
-  real, dimension(1:nAlts) :: LiouCSLeft_P12, LiouCSRight_P12
-
-  real, dimension(1:nAlts) :: LiouEnthalpyLeft_M12, LiouEnthalpyRight_M12
-  real, dimension(1:nAlts) :: LiouEnthalpyLeft_P12, LiouEnthalpyRight_P12
-  real, dimension(1:nAlts) :: InterfaceCS_M12, InterfaceCS_P12
-
-  real, dimension(1:nAlts,1:nSpecies) :: SpeciesLiouCSLeft_M12, SpeciesLiouCSRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: SpeciesLiouCSLeft_P12, SpeciesLiouCSRight_P12
-
-  real, dimension(1:nAlts,1:nSpecies) :: SpeciesLiouEnthalpyLeft_M12, SpeciesLiouEnthalpyRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: SpeciesLiouEnthalpyLeft_P12, SpeciesLiouEnthalpyRight_P12
-
-
-  real, dimension(1:nAlts,1:nSpecies) :: MLeft_M12, MRight_M12
-  real, dimension(1:nAlts,1:nSpecies) :: MLeft_P12, MRight_P12
-
-  real, dimension(1:nAlts,1:nSpecies) :: M2Bar_M12, M2Bar_P12
-  real, dimension(1:nAlts,1:nSpecies) :: M2Zero_M12, M2Zero_P12
-
-  real, dimension(1:nAlts,1:nSpecies) :: MZero_M12, MZero_P12
   real:: MInf, LiouBeta
+  ! New Streamlined Variables
+  real, dimension(0:nAlts,1:nSpecies) ::         RhoSLeft,         RhoSRight
+  real, dimension(0:nAlts,1:nSpecies) ::      LogRhoSLeft,      LogRhoSRight
+  real, dimension(0:nAlts,1:nSpecies) ::    HydroRhoSLeft,    HydroRhoSRight
+  real, dimension(0:nAlts,1:nSpecies) :: LogHydroRhoSLeft, LogHydroRhoSRight
+  real, dimension(0:nAlts,1:nSpecies) ::     MeanRhoS
+  ! New Pressure Variables
+  real, dimension(0:nAlts,1:nSpecies) :: PressureSLeft, PressureSRight
+  real, dimension(0:nAlts,1:nSpecies) :: HydroPressureSLeft, HydroPressureSRight
+  real, dimension(0:nAlts,1:nSpecies) :: MeanPressureS
+  real, dimension(0:nAlts,1:nSpecies) :: MeanHydroPressureS
+  ! New Species Winds 
+  real, dimension(0:nAlts,1:nSpecies) ::     VertVelSLeft,     VertVelSRight
+  ! Bulk Fields
+  real, dimension(0:nAlts)            :: RhoLeft, RhoRight
+  real, dimension(0:nAlts)            :: TemperatureLeft, TemperatureRight
+  real, dimension(0:nAlts)            :: PressureLeft, PressureRight
+  real, dimension(0:nAlts,1:3)        :: VelGDLeft, VelGDRight
+  real, dimension(0:nAlts)            :: GammaLeft, GammaRight
+  ! Derived Fields
+  real, dimension(0:nAlts)            :: EnergyLeft, EnergyRight
+  real, dimension(0:nAlts)            :: EnthalpyLeft, EnthalpyRight
+  real, dimension(0:nAlts,1:nSpecies) :: EnthalpySLeft, EnthalpySRight
 
-!!! Polynomial Mach Functions
+  ! Sound Speed Fields
+  real, dimension(0:nAlts)            :: SoundSpeedLeft, SoundSpeedRight
+  real, dimension(0:nAlts)            :: InterfaceSoundSpeed
+  real, dimension(0:nAlts,1:nSpecies) :: SoundSpeedSLeft, SoundSpeedSRight
+  real, dimension(0:nAlts,1:nSpecies) :: InterfaceSoundSpeedS
 
-!!! First Order Polynomial
-  real, dimension(1:nAlts,1:nSpecies) :: MF1P_Left_M12, MF1N_Left_M12
-  real, dimension(1:nAlts,1:nSpecies) :: MF1P_Right_M12, MF1N_Right_M12
+  ! Mach Numbers 
+  real, dimension(0:nAlts,1:nSpecies) :: MachSLeft, MachSRight
+  real, dimension(0:nAlts,1:nSpecies) :: MachSBar2
+  real, dimension(0:nAlts,1:nSpecies) :: MachSZero2, MachSZero
+  ! AUSM+-up Parameters
+  real, dimension(0:nAlts,1:nSpecies) :: KpSParam, KuSParam
+  
+  ! Mach Functions 
+  ! M(1)
+  real, dimension(0:nAlts,1:nSpecies) ::  MachSFn1PLeft,  MachSFn1NLeft
+  real, dimension(0:nAlts,1:nSpecies) :: MachSFn1PRight, MachSFn1NRight
+  ! M(2)
+  real, dimension(0:nAlts,1:nSpecies) ::  MachSFn2PLeft,  MachSFn2NLeft
+  real, dimension(0:nAlts,1:nSpecies) :: MachSFn2PRight, MachSFn2NRight
+  ! M(4)
+  real, dimension(0:nAlts,1:nSpecies) ::  MachSFn4PLeft,  MachSFn4NLeft
+  real, dimension(0:nAlts,1:nSpecies) :: MachSFn4PRight, MachSFn4NRight
 
-  real, dimension(1:nAlts,1:nSpecies) :: MF1P_Left_P12, MF1N_Left_P12
-  real, dimension(1:nAlts,1:nSpecies) :: MF1P_Right_P12, MF1N_Right_P12
-
-!!!! 2nd Order Polynomial
-  real, dimension(1:nAlts,1:nSpecies) :: MF2P_Left_M12, MF2N_Left_M12
-  real, dimension(1:nAlts,1:nSpecies) :: MF2P_Right_M12, MF2N_Right_M12
-
-  real, dimension(1:nAlts,1:nSpecies) :: MF2P_Left_P12, MF2N_Left_P12
-  real, dimension(1:nAlts,1:nSpecies) :: MF2P_Right_P12, MF2N_Right_P12
-
-!!!! 4th Order Polynomial
-  real, dimension(1:nAlts,1:nSpecies) :: MF4P_Left_M12, MF4N_Left_M12
-  real, dimension(1:nAlts,1:nSpecies) :: MF4P_Right_M12, MF4N_Right_M12
-
-  real, dimension(1:nAlts,1:nSpecies) :: MF4P_Left_P12, MF4N_Left_P12
-  real, dimension(1:nAlts,1:nSpecies) :: MF4P_Right_P12, MF4N_Right_P12
-
-!!!! Pressure Mach Number
-  real, dimension(1:nAlts,1:nSpecies) :: MPress_M12, MPress_P12
-
-!!!! Interface Mach Number
-  real, dimension(1:nAlts,1:nSpecies) :: SpeciesInterfaceCS_M12, SpeciesInterfaceCS_P12
-  real, dimension(1:nAlts,1:nSpecies) :: SpeciesMeanCS_M12, SpeciesMeanCS_P12
-  real, dimension(1:nAlts,1:nSpecies) :: InterfaceMach_M12, InterfaceMach_P12
-
-  real, dimension(1:nAlts,1:nSpecies) :: LiouNumericalVelocity_M12, &
-                                         LiouNumericalVelocity_P12
-
-!!! Extract Mean Atmosphere Values
-
-! Thornber Correction
+  ! MPress
+  real, dimension(0:nAlts,1:nSpecies) ::  AUSMMachPressureParamS
+  ! Numerical Velocity and Pressure
+  real, dimension(0:nAlts,1:nSpecies) ::  NumericalVertVelS
+  real, dimension(0:nAlts,1:nSpecies) ::  NumericalPressureS
+  real, dimension(0:nAlts           ) ::  BulkNumericalVertVel
+  ! Interface Flux
+  real, dimension(0:nAlts,1:nSpecies) ::  RhoSFlux
+  real, dimension(0:nAlts,1:nSpecies) ::  MomentumSFlux
+  real, dimension(0:nAlts,1:3       ) ::  MomentumFlux
+  real, dimension(0:nAlts           ) ::  EnergyFlux
+  ! Thornber Correction
   real :: ZVar, VL, VR, CBar, ML, MR
-
-  ! Updated LiouKpS and KuS
-  real :: LiouKpS_P12(1:nAlts,1:nSpecies), LiouKuS_P12(1:nAlts,1:nSpecies)
-  real :: LiouKpS_M12(1:nAlts,1:nSpecies), LiouKuS_M12(1:nAlts,1:nSpecies)
-  real :: LogKuS_P12(1:nAlts,1:nSpecies), LogKuS_M12(1:nAlts,1:nSpecies)
-  real :: LogMaxKuS(1:nAlts,1:nSpecies), LogMinKuS(1:nAlts,1:nSpecies)
-  real :: Alt_P12, Alt_M12
   real :: MachScaling
+
 
   MInf = 1.0e-19
   LiouBeta = 1.0/8.0
 
-  LogRhoS(-1:nAlts+2,1:nSpecies) = alog(RhoS(-1:nAlts+2,1:nSpecies))
+       LogRhoS(-1:nAlts+2,1:nSpecies) =      alog(RhoS(-1:nAlts+2,1:nSpecies))
   LogHydroRhoS(-1:nAlts+2,1:nSpecies) = alog(HydroRhoS(-1:nAlts+2,1:nSpecies))
-  LogPS(-1:nAlts+2,1:nSpecies) = alog(PressureS(-1:nAlts+2,1:nSpecies))
-  LogHydroPressureS(-1:nAlts+2,1:nSpecies) = &
-                            alog(HydroPressureS(-1:nAlts+2,1:nSpecies))
-
-
-!!!! Grab the left and right states of the Variables
-!!!!  on boh Interfaces (P12 = +1/2 and M12 = -1/2)
-    do iSpecies = 1, nSpecies
-          !! Calculate the Left and Right Faces of the RhoS 
-           call calc_kt_facevalues(LogRhoS(-1:nAlts+2,iSpecies), &
-                           LogRhoSLeft_M12( 1:nAlts  ,iSpecies), &
-                          LogRhoSRight_M12( 1:nAlts  ,iSpecies), &
-                           LogRhoSLeft_P12( 1:nAlts  ,iSpecies), &
-                          LogRhoSRight_P12( 1:nAlts  ,iSpecies) )
-
-           RhoSLeft_M12(:,iSpecies) = exp( LogRhoSLeft_M12(:,iSpecies)) 
-          RhoSRight_M12(:,iSpecies) = exp(LogRhoSRight_M12(:,iSpecies)) 
-
-           RhoSLeft_P12(:,iSpecies) = exp( LogRhoSLeft_P12(:,iSpecies)) 
-          RhoSRight_P12(:,iSpecies) = exp(LogRhoSRight_P12(:,iSpecies)) 
-
-    enddo 
-
-   RhoLeft_M12(:) = 0.0
-   RhoRight_M12(:) = 0.0
-
-   RhoLeft_P12(:) = 0.0
-   RhoRight_P12(:) = 0.0
-
-   do iSpecies = 1, nSpecies
-      RhoLeft_M12(1:nAlts) = RhoLeft_M12(1:nAlts) + &
-                            RhoSLeft_M12(1:nAlts,iSpecies)
-      RhoRight_M12(1:nAlts) = RhoRight_M12(1:nAlts) + &
-                             RhoSRight_M12(1:nAlts,iSpecies)
-
-      RhoLeft_P12(1:nAlts) = RhoLeft_P12(1:nAlts) + &
-                            RhoSLeft_P12(1:nAlts,iSpecies)
-      RhoRight_P12(1:nAlts) = RhoRight_P12(1:nAlts) + &
-                             RhoSRight_P12(1:nAlts,iSpecies)
-   enddo 
-
-
-    do iSpecies = 1, nSpecies
-          !! Calculate the Left and Right Faces of the RhoS 
-           call calc_kt_facevalues(LogHydroRhoS(-1:nAlts+2,iSpecies), &
-                              LogHydroRhoSLeft_M12(1:nAlts,iSpecies), &
-                              LogHydroRhoSRight_M12(1:nAlts,iSpecies), &
-                               LogHydroRhoSLeft_P12(1:nAlts,iSpecies), &
-                              LogHydroRhoSRight_P12(1:nAlts,iSpecies) )
-
-           HydroRhoSLeft_M12(:,iSpecies) = &
-                 exp( LogHydroRhoSLeft_M12(:,iSpecies)) 
-          HydroRhoSRight_M12(:,iSpecies) = &
-                 exp(LogHydroRhoSRight_M12(:,iSpecies)) 
-
-           HydroRhoSLeft_P12(:,iSpecies) = &
-                 exp( LogHydroRhoSLeft_P12(:,iSpecies)) 
-          HydroRhoSRight_P12(:,iSpecies) = &
-                 exp(LogHydroRhoSRight_P12(:,iSpecies)) 
-
-    enddo 
-
-
-        !! Calculate the Left and Right Faces of the Pressure 
-    call calc_kt_facevalues(Temp(:), TempLeft_M12(:), TempRight_M12(:), &
-                                     TempLeft_P12(:), TempRight_P12(:) )
-
-    do iSpecies = 1, nSpecies
-       PressureSLeft_P12(1:nAlts,iSpecies) = &
-           (RhoSLeft_P12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempLeft_P12(1:nAlts)
-       HydroPressureSLeft_P12(1:nAlts,iSpecies) = &
-           (HydroRhoSLeft_P12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempLeft_P12(1:nAlts)
-       PressureSRight_P12(1:nAlts,iSpecies) = &
-           (RhoSRight_P12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempRight_P12(1:nAlts)
-       HydroPressureSRight_P12(1:nAlts,iSpecies) = &
-           (HydroRhoSRight_P12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempRight_P12(1:nAlts)
-
-       PressureSLeft_M12(1:nAlts,iSpecies) = &
-           (RhoSLeft_M12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempLeft_M12(1:nAlts)
-       HydroPressureSLeft_M12(1:nAlts,iSpecies) = &
-           (HydroRhoSLeft_M12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempLeft_M12(1:nAlts)
-       PressureSRight_M12(1:nAlts,iSpecies) = &
-           (RhoSRight_M12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempRight_M12(1:nAlts)
-       HydroPressureSRight_M12(1:nAlts,iSpecies) = &
-           (HydroRhoSRight_M12(1:nAlts,iSpecies)/Mass(iSpecies))*Boltzmanns_Constant*TempRight_M12(1:nAlts)
-
-    enddo 
-
-
-   do iSpecies = 1, nSpecies
-         !! Calculate the Left and Right Faces of the Var (Rho) 
-     call calc_kt_facevalues(VertVel(:,iSpecies), &
-                         VelLeft_M12(:,iSpecies), VelRight_M12(:,iSpecies), &
-                         VelLeft_P12(:,iSpecies), VelRight_P12(:,iSpecies) )
-   enddo 
-
-
-   PLeft_M12(:) = 0.0
-   PRight_M12(:) = 0.0
- 
-   PLeft_P12(:) = 0.0
-   PRight_P12(:) = 0.0
-
-   do iSpecies = 1, nSpecies
-      PLeft_M12(1:nAlts) = PLeft_M12(1:nAlts) + &
-                   PressureSLeft_M12(1:nAlts,iSpecies)
-      PRight_M12(1:nAlts) = PRight_M12(1:nAlts) + &
-                    PressureSRight_M12(1:nAlts,iSpecies)
-
-      PLeft_P12(1:nAlts) = PLeft_P12(1:nAlts) + &
-                   PressureSLeft_P12(1:nAlts,iSpecies)
-      PRight_P12(1:nAlts) = PRight_P12(1:nAlts) + &
-                    PressureSRight_P12(1:nAlts,iSpecies)
-   enddo 
-
-
-   do iDim = 1, 3
-      !! Calculate the Left and Right Faces of the Var (Rho) 
-       call calc_kt_facevalues(Vel_GD(:,iDim), &
-                        VelGDLeft_M12(:,iDim), &
-                       VelGDRight_M12(:,iDim), &
-                     VelGDLeft_P12(:,iDim), &
-                       VelGDRight_P12(:,iDim) )
-   enddo 
-
-   VelGDLeft_M12(:,iUp_) = 0.0
-   VelGDRight_M12(:,iUp_) = 0.0
-
-   VelGDLeft_P12(:,iUp_) = 0.0
-   VelGDRight_P12(:,iUp_) = 0.0
-
-   do iSpecies = 1, nSpecies
-
-        VelGDLeft_M12(1:nAlts,iUp_) = &
-                 VelGDLeft_M12(1:nAlts,iUp_) + &
-                 RhoSLeft_M12(1:nAlts,iSpecies)*&
-                 VelLeft_M12(1:nAlts,iSpecies)/RhoLeft_M12(1:nAlts)
-
-        VelGDRight_M12(1:nAlts,iUp_) = &
-                 VelGDRight_M12(1:nAlts,iUp_) + &
-                 RhoSRight_M12(1:nAlts,iSpecies)*&
-                 VelRight_M12(1:nAlts,iSpecies)/RhoRight_M12(1:nAlts)
-
-        VelGDLeft_P12(1:nAlts,iUp_) = &
-                 VelGDLeft_P12(1:nAlts,iUp_) + &
-                 RhoSLeft_P12(1:nAlts,iSpecies)*&
-                 VelLeft_P12(1:nAlts,iSpecies)/RhoLeft_P12(1:nAlts)
-
-        VelGDRight_P12(1:nAlts,iUp_) = &
-                 VelGDRight_P12(1:nAlts,iUp_) + &
-                 RhoSRight_P12(1:nAlts,iSpecies)*&
-                 VelRight_P12(1:nAlts,iSpecies)/RhoRight_P12(1:nAlts)
-   enddo 
-
-        !! Calculate the Left and Right Faces of the Pressure 
-   call calc_kt_facevalues(Gamma_1d(:), GammaLeft_M12(:), GammaRight_M12(:), &
-                                        GammaLeft_P12(:), GammaRight_P12(:) )
-
-    do iAlt = 1, nAlts
-!!!! ============= Bulk Values
-        ELeft_M12(iAlt) = &
-            ( 1.0/(GammaLeft_M12(iAlt) - 1.0))*PLeft_M12(iAlt) + &
-              0.5*RhoLeft_M12(iAlt)*&
-             (VelGDLeft_M12(iAlt,iUp_)**2.0 + VelGDLeft_M12(iAlt,iEast_)**2.0 + &
-              VelGDLeft_M12(iAlt,iNorth_)**2.0)
-
-        ERight_M12(iAlt) = &
-            ( 1.0/(GammaRight_M12(iAlt) - 1.0))*PRight_M12(iAlt) + &
-              0.5*RhoRight_M12(iAlt)*&
-             (VelGDRight_M12(iAlt,iUp_)**2.0 + VelGDRight_M12(iAlt,iEast_)**2.0 + &
-              VelGDRight_M12(iAlt,iNorth_)**2.0)
-
-        ELeft_P12(iAlt) = &
-            ( 1.0/(GammaLeft_P12(iAlt) - 1.0))*PLeft_P12(iAlt) + &
-              0.5*RhoLeft_P12(iAlt)* &
-             (VelGDLeft_P12(iAlt,iUp_)**2.0 + VelGDLeft_P12(iAlt,iEast_)**2.0 + &
-              VelGDLeft_P12(iAlt,iNorth_)**2.0)
-
-        ERight_P12(iAlt) = &
-            ( 1.0/(GammaRight_P12(iAlt) - 1.0))*PRight_P12(iAlt) + &
-              0.5*RhoRight_P12(iAlt)* &
-             (VelGDRight_P12(iAlt,iUp_)**2.0 + VelGDRight_P12(iAlt,iEast_)**2.0 + &
-              VelGDRight_P12(iAlt,iNorth_)**2.0)
-
-    enddo 
-
-
-
-!!!! Liou et al. [2006] suggest using the Enthalpy for the 
-!!!! numerical speed of sound.
-!!!! Calculate the Enthalpy at the cell faces here.
-!    write(*,*) 'ENTHALPY CALC:=============='
-    do iAlt = 1, nAlts 
-
-!      write(*,*) 'Gamma(i-1), GammaLeft_M12, GammaRight_M12, Gamma(i) =', &
-!            Gamma_1d(iAlt-1), GammaLeft_M12(iAlt), GammaRight_M12(iAlt), &
-!            Gamma_1d(iAlt)
-
-       LiouEnthalpyLeft_M12(iAlt) = &
-         0.5*(VelGDLeft_M12(iAlt,iUp_)**2.0 + &
-              VelGDLeft_M12(iAlt,iEast_)**2.0 + &
-              VelGDLeft_M12(iAlt,iNorth_)**2.0) + &
-            (GammaLeft_M12(iAlt)/(GammaLeft_M12(iAlt) - 1.0))*&
-            PLeft_M12(iAlt)/RhoLeft_M12(iAlt)
-
-       LiouEnthalpyRight_M12(iAlt) = &
-            0.5*(VelGDRight_M12(iAlt,iUp_)**2.0 + &
-                 VelGDRight_M12(iAlt,iEast_)**2.0 + &
-                 VelGDRight_M12(iAlt,iNorth_)**2.0) + &
-            (GammaRight_M12(iAlt)/(GammaRight_M12(iAlt) - 1.0))*&
-            PRight_M12(iAlt)/RhoRight_M12(iAlt)
-
-
-       LiouEnthalpyLeft_P12(iAlt) = &
-            0.5*(VelGDLeft_P12(iAlt,iUp_)**2.0 + &
-                 VelGDLeft_P12(iAlt,iEast_)**2.0 + &
-                 VelGDLeft_P12(iAlt,iNorth_)**2.0) + &
-            (GammaLeft_P12(iAlt)/(GammaLeft_P12(iAlt) - 1.0))*&
-            PLeft_P12(iAlt)/RhoLeft_P12(iAlt)
-
-
-       LiouEnthalpyRight_P12(iAlt) = &
-            0.5*(VelGDRight_P12(iAlt,iUp_)**2.0 + &
-                 VelGDRight_P12(iAlt,iEast_)**2.0 + &
-                 VelGDRight_P12(iAlt,iNorth_)**2.0) + &
-            (GammaRight_P12(iAlt)/(GammaRight_P12(iAlt) - 1.0))*&
-            PRight_P12(iAlt)/RhoRight_P12(iAlt)
-
-!      write(*,*) 'Gamma(i), GammaLeft_P12, GammaRight_P12, Gamma(i+1) =', &
-!            Gamma_1d(iAlt), GammaLeft_P12(iAlt), GammaRight_P12(iAlt), &
-!            Gamma_1d(iAlt+1)
-
-!      write(*,*) ' PLeft_M12(iAlt), PRight_M12, PLeft_P12, PRight_P12 =', &
-!            PLeft_M12(iAlt), PRight_M12(iAlt), PLeft_P12(iAlt), &
-!            PRight_P12(iAlt)
-    enddo 
-
-!!!! Liou et al. [2006] suggest using the Enthalpy for the 
-!!!! numerical speed of sound.
-!!!! Calculate the Enthalpy at the cell faces here.
-!    write(*,*) 'ENTHALPY CALC:=============='
-    do iAlt = 1, nAlts 
-      do iSpecies = 1, nSpecies 
-
-          SpeciesLiouEnthalpyLeft_M12(iAlt,iSpecies) = &
-            0.5*( VelLeft_M12(iAlt,iSpecies)**2.0 + &
-                VelGDLeft_M12(iAlt,iEast_  )**2.0 + &
-                VelGDLeft_M12(iAlt,iNorth_ )**2.0 ) + &
-               (GammaLeft_M12(iAlt)/(GammaLeft_M12(iAlt) - 1.0))*&
-               PressureSLeft_M12(iAlt,iSpecies)/RhoSLeft_M12(iAlt,iSpecies)
-
-          SpeciesLiouEnthalpyRight_M12(iAlt,iSpecies) = &
-               0.5*( VelRight_M12(iAlt,iSpecies)**2.0 + &
-                   VelGDRight_M12(iAlt,iEast_  )**2.0 + &
-                   VelGDRight_M12(iAlt,iNorth_ )**2.0) + &
-               (GammaRight_M12(iAlt)/(GammaRight_M12(iAlt) - 1.0))*&
-               PressureSRight_M12(iAlt,iSpecies)/RhoSRight_M12(iAlt,iSpecies)
-
-
-          SpeciesLiouEnthalpyLeft_P12(iAlt,iSpecies) = &
-               0.5*(  VelLeft_P12(iAlt,iSpecies)**2.0 + &
-                    VelGDLeft_P12(iAlt,iEast_  )**2.0 + &
-                    VelGDLeft_P12(iAlt,iNorth_ )**2.0) + &
-               (GammaLeft_P12(iAlt)/(GammaLeft_P12(iAlt) - 1.0))*&
-               PressureSLeft_P12(iAlt,iSpecies)/RhoSLeft_P12(iAlt,iSpecies)
-
-          SpeciesLiouEnthalpyRight_P12(iAlt,iSpecies) = &
-               0.5*(  VelRight_P12(iAlt,iSpecies)**2.0 + &
-                    VelGDRight_P12(iAlt,iEast_  )**2.0 + &
-                    VelGDRight_P12(iAlt,iNorth_ )**2.0) + &
-               (GammaRight_P12(iAlt)/(GammaRight_P12(iAlt) - 1.0))*&
-               PressureSRight_P12(iAlt,iSpecies)/RhoSRight_P12(iAlt,iSpecies)
-
-      enddo !iSpecies = 1, nSpecies 
-    enddo !iAlt = 1, nAlts 
-
-!!! Liou Methodology
-   do iAlt = 1, nAlts
-       SubCs = & 
-         sqrt(2.0*( (GammaLeft_M12(iAlt) - 1.0 )/(GammaLeft_M12(iAlt) + 1.0)) *&
-         LiouEnthalpyLeft_M12(iAlt) )
-
-         LiouCSLeft_M12(iAlt) = & 
-             (SubCs**2.0)/max(SubCs, VelGDLeft_M12(iAlt,iUp_))
-
-       SubCs = &
-       sqrt(2.0*( (GammaRight_M12(iAlt) - 1.0 )/(GammaRight_M12(iAlt) + 1.0)) *&
-        LiouEnthalpyRight_M12(iAlt) )
-
-       LiouCSRight_M12(iAlt) = &
-           (SubCs**2.0)/max(SubCs, -1.0*VelGDRight_M12(iAlt,iUp_))
-
-       InterfaceCS_M12(iAlt) = min(LiouCSLeft_M12(iAlt), LiouCSRight_M12(iAlt))
-
-      SubCs = &
-         sqrt(2.0*( (GammaLeft_P12(iAlt) - 1.0 )/(GammaLeft_P12(iAlt) + 1.0)) *&
-            LiouEnthalpyLeft_P12(iAlt) )
-      LiouCSLeft_P12(iAlt) = &
-            (SubCs**2.0)/max(SubCs, VelGDLeft_P12(iAlt,iUp_))
-
-      SubCs = &
-      sqrt(2.0*( (GammaRight_P12(iAlt) - 1.0 )/(GammaRight_P12(iAlt) + 1.0)) *&
-         LiouEnthalpyRight_P12(iAlt) )
-
-         LiouCSRight_P12(iAlt) = &
-              (SubCs**2.0)/max(SubCs, -1.0*VelGDRight_P12(iAlt,iUp_))
-
-      InterfaceCS_P12(iAlt) = min(LiouCSLeft_P12(iAlt), LiouCSRight_P12(iAlt))
-
-
-   enddo 
-
-   !!! Liou Methodology
-   do iAlt = 1, nAlts
+
+  ! Establish Cell Interface values 
+  ! Get the RhoS facevaluess and Bulk Rho facevalues
+   RhoLeft(0:nAlts) = 0.0
+  RhoRight(0:nAlts) = 0.0
+  do iSpecies = 1, nSpecies
+     call calc_tvd_facevalues(LogRhoS(-1:nAlts+2,iSpecies), &
+                      LogRhoSLeft( 0:nAlts  ,iSpecies), &
+                     LogRhoSRight( 0:nAlts  ,iSpecies) )
+      RhoSLeft(:,iSpecies) = exp( LogRhoSLeft(:,iSpecies))
+     RhoSRight(:,iSpecies) = exp(LogRhoSRight(:,iSpecies))
+     ! Bulk Rho
+      RhoLeft(:) =  RhoLeft(:) +    RhoSLeft(:,iSpecies)
+     RhoRight(:) = RhoRight(:) +   RhoSRight(:,iSpecies)
+  enddo 
+  ! End RhoS, Rho Facevalues
+
+  ! Begin HydroRhoS, HydroRho Facevalues:
+  ! Note: Hydro denotes hydrostatic background
+  do iSpecies = 1, nSpecies
+     call calc_tvd_facevalues(LogHydroRhoS(-1:nAlts+2,iSpecies), &
+                      LogHydroRhoSLeft( 0:nAlts  ,iSpecies), &
+                     LogHydroRhoSRight( 0:nAlts  ,iSpecies) )
+      HydroRhoSLeft(:,iSpecies) = exp( LogHydroRhoSLeft(:,iSpecies))
+     HydroRhoSRight(:,iSpecies) = exp(LogHydroRhoSRight(:,iSpecies))
+  enddo 
+  ! End HydroRhoS, HydroRho Facevalues
+
+  ! Calculate the Left and Right Faces of the Temperatures 
+  call calc_tvd_facevalues(Temp(-1:nAlts+2), &
+                TemperatureLeft( 0:nAlts  ), &
+               TemperatureRight( 0:nAlts  ) )
+
+  PressureRight = 0.0
+   PressureLeft = 0.0
+  do iSpecies = 1, nSpecies
+     PressureSLeft(0:nAlts,iSpecies) = &
+         (RhoSLeft(0:nAlts,iSpecies)/Mass(iSpecies))*&
+         Boltzmanns_Constant*TemperatureLeft(0:nAlts)
+     PressureLeft = PressureLeft + PressureSLeft(:,iSpecies)
+
+     HydroPressureSLeft(0:nAlts,iSpecies) = &
+         (HydroRhoSLeft(0:nAlts,iSpecies)/Mass(iSpecies))*&
+        Boltzmanns_Constant*TemperatureLeft(0:nAlts)
+
+     PressureSRight(0:nAlts,iSpecies) = &
+        (RhoSRight(0:nAlts,iSpecies)/Mass(iSpecies))*&
+         Boltzmanns_Constant*TemperatureRight(0:nAlts)
+     PressureRight = PressureRight + PressureSRight(:,iSpecies)
+
+    HydroPressureSRight(0:nAlts,iSpecies) = &
+        (HydroRhoSRight(0:nAlts,iSpecies)/Mass(iSpecies))*&
+         Boltzmanns_Constant*TemperatureRight(0:nAlts)
+  enddo 
+
+  ! Begin Vertical, Horizontal Species and Bulk Winds
+  do iSpecies = 1, nSpecies
+    call calc_tvd_facevalues(VertVel(:,iSpecies), &
+                        VertVelSLeft(:,iSpecies), &
+                       VertVelSRight(:,iSpecies))
+  enddo 
+
+  do iDim = 1, 3
+     call calc_tvd_facevalues(Vel_GD(:,iDim), &
+                           VelGDLeft(:,iDim), &
+                          VelGDRight(:,iDim))
+  enddo 
+
+   VelGDLeft(:,iUp_) = 0.0
+  VelGDRight(:,iUp_) = 0.0
+  do iSpecies = 1, nSpecies
+      VelGDLeft(:,iUp_) = VelGDLeft(:,iUp_) + &
+           RhoSLeft(:,iSpecies)*VertVelSLeft(:,iSpecies)/&
+            RhoLeft(:)
+
+      VelGDRight(:,iUp_) = VelGDRight(:,iUp_) + &
+           RhoSRight(:,iSpecies)*VertVelSRight(:,iSpecies)/&
+            RhoRight(:)
+  enddo !iSpecies = 1, nSpecies
+
+  call calc_tvd_facevalues(Gamma_1d(:), GammaLeft(:), GammaRight(:))
+
+  do iAlt = 0, nAlts
+     EnergyLeft(iAlt) = &
+         ( 1.0/(GammaLeft(iAlt) - 1.0))*PressureLeft(iAlt) + &
+           0.5*RhoLeft(iAlt)*&
+          (VelGDLeft(iAlt,iUp_)**2.0 + VelGDLeft(iAlt,iEast_)**2.0 + &
+           VelGDLeft(iAlt,iNorth_)**2.0)
+
+     EnergyRight(iAlt) = &
+         ( 1.0/(GammaRight(iAlt) - 1.0))*PressureRight(iAlt) + &
+           0.5*RhoRight(iAlt)*&
+          (VelGDRight(iAlt,iUp_)**2.0 + VelGDRight(iAlt,iEast_)**2.0 + &
+           VelGDRight(iAlt,iNorth_)**2.0)
+  enddo 
+
+  do iAlt = 0, nAlts 
+     EnthalpyLeft(iAlt) = &
+       0.5*(VelGDLeft(iAlt,iUp_)**2.0 + &
+            VelGDLeft(iAlt,iEast_)**2.0 + &
+            VelGDLeft(iAlt,iNorth_)**2.0) + &
+          (GammaLeft(iAlt)/(GammaLeft(iAlt) - 1.0))*&
+          PressureLeft(iAlt)/RhoLeft(iAlt)
+
+     EnthalpyRight(iAlt) = &
+       0.5*(VelGDRight(iAlt,iUp_)**2.0 + &
+            VelGDRight(iAlt,iEast_)**2.0 + &
+            VelGDRight(iAlt,iNorth_)**2.0) + &
+          (GammaRight(iAlt)/(GammaRight(iAlt) - 1.0))*&
+          PressureRight(iAlt)/RhoRight(iAlt)
+
      do iSpecies = 1, nSpecies
-       SubCs = & 
-         sqrt(2.0*( (GammaLeft_M12(iAlt) - 1.0 )/(GammaLeft_M12(iAlt) + 1.0)) *&
-         SpeciesLiouEnthalpyLeft_M12(iAlt,iSpecies) )
-         SpeciesLiouCSLeft_M12(iAlt,iSpecies) = & 
-             (SubCs**2.0)/max(SubCs, VelLeft_M12(iAlt,iSpecies))
 
-       SubCs = & 
-         sqrt(2.0*( (GammaRight_M12(iAlt) - 1.0 )/(GammaRight_M12(iAlt) + 1.0)) *&
-         SpeciesLiouEnthalpyRight_M12(iAlt,iSpecies) )
-         SpeciesLiouCSRight_M12(iAlt,iSpecies) = & 
-             (SubCs**2.0)/max(SubCs, VelRight_M12(iAlt,iSpecies))
+        EnthalpySLeft(iAlt,iSpecies) = &
+          0.5*(VertVelSLeft(iAlt,iSpecies)**2.0 + &
+               VelGDLeft(iAlt,iEast_)**2.0 + &
+               VelGDLeft(iAlt,iNorth_)**2.0) + &
+             (GammaLeft(iAlt)/(GammaLeft(iAlt) - 1.0))*&
+             PressureSLeft(iAlt,iSpecies)/RhoSLeft(iAlt,iSpecies)
 
-       SpeciesInterfaceCS_M12(iAlt,iSpecies) = &
-           min(SpeciesLiouCSLeft_M12(iAlt,iSpecies), SpeciesLiouCSRight_M12(iAlt,iSpecies))
-
-
-       SubCs = & 
-         sqrt(2.0*( (GammaLeft_P12(iAlt) - 1.0 )/(GammaLeft_P12(iAlt) + 1.0)) *&
-         SpeciesLiouEnthalpyLeft_P12(iAlt,iSpecies) )
-         SpeciesLiouCSLeft_P12(iAlt,iSpecies) = & 
-             (SubCs**2.0)/max(SubCs, VelLeft_P12(iAlt,iSpecies))
-
-       SubCs = & 
-         sqrt(2.0*( (GammaRight_P12(iAlt) - 1.0 )/(GammaRight_P12(iAlt) + 1.0)) *&
-         SpeciesLiouEnthalpyRight_P12(iAlt,iSpecies) )
-         SpeciesLiouCSRight_P12(iAlt,iSpecies) = & 
-             (SubCs**2.0)/max(SubCs, VelRight_P12(iAlt,iSpecies))
-
-       SpeciesInterfaceCS_P12(iAlt,iSpecies) = &
-           min(SpeciesLiouCSLeft_P12(iAlt,iSpecies), SpeciesLiouCSRight_P12(iAlt,iSpecies))
+        EnthalpySRight(iAlt,iSpecies) = &
+          0.5*(VertVelSRight(iAlt,iSpecies)**2.0 + &
+               VelGDRight(iAlt,iEast_)**2.0 + &
+               VelGDRight(iAlt,iNorth_)**2.0) + &
+             (GammaRight(iAlt)/(GammaRight(iAlt) - 1.0))*&
+             PressureSRight(iAlt,iSpecies)/RhoSRight(iAlt,iSpecies)
 
      enddo !iSpecies = 1, nSpecies
-   enddo  ! iAlt
+  enddo 
 
-   do iSpecies = 1, nSpecies
-     do iAlt = 1, nAlts
+  do iAlt = 0, nAlts
+     SubCs = &
+        sqrt(2.0*( (GammaLeft(iAlt) - 1.0 )/(GammaLeft(iAlt) + 1.0)) *&
+                 EnthalpyLeft(iAlt) )
+     SoundSpeedLeft(iAlt) = (SubCs**2.0)/max(SubCs, VelGDLeft(iAlt,iUp_))
+
+     ! Note the -1.0 factor in the Right face
+     SubCs = &
+        sqrt(2.0*( (GammaRight(iAlt) - 1.0 )/(GammaRight(iAlt) + 1.0)) *&
+                 EnthalpyRight(iAlt) )
+     SoundSpeedRight(iAlt) = (SubCs**2.0)/max(SubCs, -1.0*VelGDRight(iAlt,iUp_))
+
+     InterfaceSoundSpeed(iAlt) = min(SoundSpeedLeft(iAlt), SoundSpeedRight(iAlt))
+     do iSpecies = 1, nSpecies
+        SubCs = &
+           sqrt(2.0*( (GammaLeft(iAlt) - 1.0 )/(GammaLeft(iAlt) + 1.0)) *&
+                    EnthalpySLeft(iAlt,iSpecies) )
+        SoundSpeedSLeft(iAlt,iSpecies) = &
+           (SubCs**2.0)/max(SubCs, VertVelSLeft(iAlt,iSpecies))
+
+        SubCs = &
+           sqrt(2.0*( (GammaRight(iAlt) - 1.0 )/(GammaRight(iAlt) + 1.0)) *&
+                    EnthalpySRight(iAlt,iSpecies) )
+        ! Note the -1.0 factor in the Right face
+        SoundSpeedSRight(iAlt,iSpecies) = &
+           (SubCs**2.0)/max(SubCs, -1.0*VertVelSRight(iAlt,iSpecies))
+        InterfaceSoundSpeedS(iAlt,iSpecies) = &
+           min(SoundSpeedSLeft(iAlt,iSpecies), SoundSpeedSRight(iAlt,iSpecies))
+     enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 0, nAlts
+
+  do iSpecies = 1, nSpecies
+     do iAlt = 0, nAlts
         ! Implement Thornber Entropy Correction at low Mach Numbers
         ! see. Thornber et al. [2008], J. Comp. Phys, 227, 4873-4894
         ! Implementation here taken from Houim et al. [2011], J Comp.Phys, 230, 8527-8553
-        CBar = SpeciesInterfaceCS_P12(iAlt,iSpecies)
-          VL =     VelLeft_P12(iAlt,iSpecies)
-          VR =    VelRight_P12(iAlt,iSpecies)
-          ML = sqrt(VL*VL)/CBar
-          MR = sqrt(VR*VR)/CBar
-          ZVar = min(1.0, max(ML,MR))
-           VelLeft_P12(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VL - VR)
-          VelRight_P12(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VR - VL)
-
-        CBar = SpeciesInterfaceCS_M12(iAlt,iSpecies)
-          VL =     VelLeft_M12(iAlt,iSpecies)
-          VR =    VelRight_M12(iAlt,iSpecies)
-          ML = sqrt(VL*VL)/CBar
-          MR = sqrt(VR*VR)/CBar
-          ZVar = min(1.0, max(ML,MR))
-           VelLeft_M12(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VL - VR)
-          VelRight_M12(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VR - VL)
+        CBar = InterfaceSoundSpeedS(iAlt,iSpecies)
+        VL   =         VertVelSLeft(iAlt,iSpecies)
+        VR   =        VertVelSRight(iAlt,iSpecies)
+        ML   = sqrt(VL*VL)/CBar
+        MR   = sqrt(VR*VR)/CBar
+        ZVar = min(1.0, max(ML,MR))
+         VertVelSLeft(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VL - VR)
+        VertVelSRight(iAlt,iSpecies) = 0.5*(VL + VR) + 0.5*ZVar*(VR - VL)
      enddo !iAlt = 1, nAlts
-   enddo !iSpecies = 1, nSpecies
-  
+  enddo !iSpecies = 1, nSpecies
 
+  MeanPressureS = 0.5*(PressureSLeft + PressureSRight)
+  MeanHydroPressureS = 0.5*(HydroPressureSLeft + HydroPressureSRight)
+  MeanRhoS = 0.5*(RhoSLeft + RhoSRight)
 
+  do iAlt = 0, nAlts 
+    do iSpecies = 1, nSpecies
+       MachSLeft(iAlt,iSpecies) = &
+         VertVelSLeft(iAlt,iSpecies)/InterfaceSoundSpeedS(iAlt,iSpecies)
+       MachSRight(iAlt,iSpecies) = &
+         VertVelSRight(iAlt,iSpecies)/InterfaceSoundSpeedS(iAlt,iSpecies)
+    enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 1, nAlts 
 
-
-!stop
-  
-  MeanPressureS_P12(1:nAlts,1:nSpecies) = &
-        0.5*(PressureSLeft_P12(1:nAlts,1:nSpecies) + &
-            PressureSRight_P12(1:nAlts,1:nSpecies))
-
-  MeanPressureS_M12(1:nAlts,1:nSpecies) = &
-        0.5*(PressureSLeft_M12(1:nAlts,1:nSpecies) + &
-            PressureSRight_M12(1:nAlts,1:nSpecies))
-
-  MeanHydroPressureS_P12(1:nAlts,1:nSpecies) = &
-        0.5*(HydroPressureSLeft_P12(1:nAlts,1:nSpecies) + &
-            HydroPressureSRight_P12(1:nAlts,1:nSpecies))
-
-  MeanHydroPressureS_M12(1:nAlts,1:nSpecies) = &
-        0.5*(HydroPressureSLeft_M12(1:nAlts,1:nSpecies) + &
-            HydroPressureSRight_M12(1:nAlts,1:nSpecies))
-
-  MeanRhoS_P12(1:nAlts,1:nSpecies) = &
-       0.5*(RhoSLeft_P12(1:nAlts,1:nSpecies) + RhoSRight_P12(1:nAlts,1:nSpecies))
-
-  MeanRhoS_M12(1:nAlts,1:nSpecies) = &
-       0.5*(RhoSLeft_M12(1:nAlts,1:nSpecies) + RhoSRight_M12(1:nAlts,1:nSpecies))
-
-  do iAlt = 1, nAlts 
-     MeanCS_P12(iAlt) = InterfaceCS_P12(iAlt)
-     MeanCS_M12(iAlt) = InterfaceCS_M12(iAlt)
-     do iSpecies = 1, nSpecies 
-        SpeciesMeanCS_P12(iAlt,iSpecies) = SpeciesInterfaceCS_P12(iAlt,iSpecies)
-        SpeciesMeanCS_M12(iAlt,iSpecies) = SpeciesInterfaceCS_M12(iAlt,iSpecies)
-     enddo !iAlt = 1, nAlts 
-  enddo 
-
-!!! Next, define local mach numbers at the interfaces
-
-   do iAlt = 1, nAlts 
+  do iAlt = 0, nAlts
      do iSpecies = 1, nSpecies
+        MachSBar2(iAlt,iSpecies) = &
+           0.5*( MachSLeft(iAlt,iSpecies)**2.0 + &
+                MachSRight(iAlt,iSpecies)**2.0 )
+        MachSZero2(iAlt,iSpecies) = &
+           min(1.0, max(MachSBar2(iAlt,iSpecies), MInf))
+        MachSZero(iAlt,iSpecies) = sqrt(MachSZero2(iAlt,iSpecies))
+     enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 1, nAlts
 
-        MLeft_M12(iAlt,iSpecies) = &
-           VelLeft_M12(iAlt,iSpecies)/SpeciesMeanCS_M12(iAlt,iSpecies)
+  ! Create Mach-Scaling Pressure-Correction Functions
+  ! Establish Mach Number Scaling Functions g(M)
+  ! We specify a g(M) such that it goes away as |M|->1
+  ! g(M) ~ M^2 as M -> 0.0
+  Kp(1:nSpecies) = 0.10             !! Ullrich et al. [2011]
+  Ku(1:nSpecies) = 0.25             !! Ullrich et al. [2011]
 
-        MRight_M12(iAlt,iSpecies) = &
-           VelRight_M12(iAlt,iSpecies)/SpeciesMeanCS_M12(iAlt,iSpecies)
-
-        MLeft_P12(iAlt,iSpecies) = &
-           VelLeft_P12(iAlt,iSpecies)/SpeciesMeanCS_P12(iAlt,iSpecies)
-
-        MRight_P12(iAlt,iSpecies) = &
-           VelRight_P12(iAlt,iSpecies)/SpeciesMeanCS_P12(iAlt,iSpecies)
-    
-     enddo 
-   enddo 
-
+  do iAlt = 0, nAlts
      do iSpecies = 1, nSpecies
-       M2Bar_M12(1:nAlts,iSpecies) = &
-        0.5*(MLeft_M12(1:nAlts,iSpecies)**2.0 + &
-             MRight_M12(1:nAlts,iSpecies)**2.0 )
+        ! Note that MZero is scaled to be within [0,1]
+        ! Specify pressure correction fluxes (LiouKpS)
+        ! Note: MZero -> [0,1]
+        ! Note: M2Zero  = (MZero)^2.0-> [0,1]
+        ! As M -> 0.0, MachScaling ~ M^2 - M^4 ~ M^2 -> Varies like a pressure at Low Mach
+        ! As M >> 1.0, MZero = 1.0, MachScaling ~ 1 - 1 -> 0.0
+        !    This shuts our correction down at high mach number
+        ! Mathematically, we want AUSM+-up Numerical Flux(Mp):
+        !        Mp ~ d(P)*/(rho*cs*(fa*cs + zeta*dz/dt)) ~ dP/rho*cs^2
 
-        M2Bar_P12(1:nAlts,iSpecies) = &
-           0.5*(MLeft_P12(1:nAlts,iSpecies)**2.0 + &
-               MRight_P12(1:nAlts,iSpecies)**2.0 )
-     enddo 
+        MachScaling = MachSZero(iAlt,iSpecies)**2.0
+        KpSParam(iAlt,iSpecies) = MachScaling*Kp(iSpecies)
 
-     do iSpecies = 1, nSpecies
-      do iAlt = 1, nAlts 
-
-        M2Zero_M12(iAlt,iSpecies) = &
-              min(1.0, max(M2Bar_M12(iAlt,iSpecies), MInf)) 
-        M2Zero_P12(iAlt,iSpecies) = &
-              min(1.0, max(M2Bar_P12(iAlt,iSpecies), MInf)) 
-
-        MZero_M12(iAlt,iSpecies) = sqrt(M2Zero_M12(iAlt,iSpecies))
-        MZero_P12(iAlt,iSpecies) = sqrt(M2Zero_P12(iAlt,iSpecies))
-
-      enddo 
-     enddo 
-
-    ! Create Mach-Scaling Pressure-Correction Functions
-    ! Establish Mach Number Scaling Functions g(M)
-    ! We specify a g(M) such that it goes away as |M|->1
-    ! g(M) ~ M^2 as M -> 0.0
-    Kp(1:nSpecies) = 0.10             !! Ullrich et al. [2011]
-    Ku(1:nSpecies) = 0.25             !! Ullrich et al. [2011]
-    do iAlt = 1, nAlts
-       do iSpecies = 1, nSpecies
-       ! Note that MZero is scaled to be within [0,1]
-       ! Specify pressure correction fluxes (LiouKpS)
-       ! Note: MZero -> [0,1]
-       ! Note: M2Zero  = (MZero)^2.0-> [0,1]
-       ! As M -> 0.0, MachScaling ~ M^2 - M^4 ~ M^2 -> Varies like a pressure at Low Mach
-       ! As M >> 1.0, MZero = 1.0, MachScaling ~ 1 - 1 -> 0.0
-       !    This shuts our correction down at high mach number
-       ! Mathematically, we want AUSM+-up Numerical Flux(Mp):
-       !        Mp ~ d(P)*/(rho*cs*(fa*cs + zeta*dz/dt)) ~ dP/rho*cs^2
-
-          MachScaling = MZero_P12(iAlt,iSpecies)**2.0
-          LiouKpS_P12(iAlt,iSpecies) = MachScaling*Kp(iSpecies)
-          MachScaling = MZero_M12(iAlt,iSpecies)**2.0
-          LiouKpS_M12(iAlt,iSpecies) = MachScaling*Kp(iSpecies)
-
-          ! Note that MZero ranges from [0, 1.0] (cap at 1.0)
-          MachScaling = 1.0 - MZero_P12(iAlt,iSpecies)
-          LiouKuS_P12(iAlt,iSpecies) = MachScaling*Ku(iSpecies)
-          MachScaling = 1.0 - MZero_M12(iAlt,iSpecies)
-          LiouKuS_M12(iAlt,iSpecies) = MachScaling*Ku(iSpecies)
-       enddo 
-    enddo 
-
-
-   do iSpecies = 1, nSpecies
-     do iAlt = 1, nAlts
-
-       MF1P_Left_M12(iAlt,iSpecies) = &
-             0.5*(MLeft_M12(iAlt,iSpecies) + abs(MLeft_M12(iAlt,iSpecies)) )
-       MF1N_Left_M12(iAlt,iSpecies) = &
-             0.5*(MLeft_M12(iAlt,iSpecies) - abs(MLeft_M12(iAlt,iSpecies)) )
-
-       MF1P_Right_M12(iAlt,iSpecies) = &
-             0.5*(MRight_M12(iAlt,iSpecies) + abs(MRight_M12(iAlt,iSpecies)) )
-       MF1N_Right_M12(iAlt,iSpecies) = &
-             0.5*(MRight_M12(iAlt,iSpecies) - abs(MRight_M12(iAlt,iSpecies)) )
-
-       MF1P_Left_P12(iAlt,iSpecies) = &
-             0.5*(MLeft_P12(iAlt,iSpecies) + abs(MLeft_P12(iAlt,iSpecies)) )
-       MF1N_Left_P12(iAlt,iSpecies) = &
-             0.5*(MLeft_P12(iAlt,iSpecies) - abs(MLeft_P12(iAlt,iSpecies)) )
-
-       MF1P_Right_P12(iAlt,iSpecies) = &
-             0.5*(MRight_P12(iAlt,iSpecies) + abs(MRight_P12(iAlt,iSpecies)) )
-       MF1N_Right_P12(iAlt,iSpecies) = &
-             0.5*(MRight_P12(iAlt,iSpecies) - abs(MRight_P12(iAlt,iSpecies)) )
+        ! Note that MZero ranges from [0, 1.0] (cap at 1.0)
+        MachScaling = 1.0 - MachSZero(iAlt,iSpecies)
+        KuSParam(iAlt,iSpecies) = MachScaling*Ku(iSpecies)
      enddo 
   enddo 
 
-   do iSpecies = 1, nSpecies
-     do iAlt = 1, nAlts
+  ! BEGIN Mach Functions 
+  ! M(1)
+  do iAlt = 0, nAlts
+     do iSpecies = 1, nSpecies
+        MachSFn1PLeft(iAlt,iSpecies) = &
+            0.5*(MachSLeft(iAlt,iSpecies) + abs(MachSLeft(iAlt,iSpecies)) )
+        MachSFn1PRight(iAlt,iSpecies) = &
+            0.5*(MachSRight(iAlt,iSpecies) + abs(MachSRight(iAlt,iSpecies)) )
 
-      MF2P_Left_M12(iAlt,iSpecies) =  0.25*(MLeft_M12(iAlt,iSpecies) + 1.0)**2.0
-      MF2N_Left_M12(iAlt,iSpecies) = -0.25*(MLeft_M12(iAlt,iSpecies) - 1.0)**2.0
+        MachSFn1NLeft(iAlt,iSpecies) = &
+            0.5*(MachSLeft(iAlt,iSpecies) - abs(MachSLeft(iAlt,iSpecies)) )
+        MachSFn1NRight(iAlt,iSpecies) = &
+            0.5*(MachSRight(iAlt,iSpecies) - abs(MachSRight(iAlt,iSpecies)) )
 
-      MF2P_Right_M12(iAlt,iSpecies) =  0.25*(MRight_M12(iAlt,iSpecies) + 1.0)**2.0
-      MF2N_Right_M12(iAlt,iSpecies) = -0.25*(MRight_M12(iAlt,iSpecies) - 1.0)**2.0
+     enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 1, nAlts
+  ! M(2)
+  do iAlt = 0, nAlts
+     do iSpecies = 1, nSpecies
+         MachSFn2PLeft(iAlt,iSpecies) =  0.25*( MachSLeft(iAlt,iSpecies) + 1.0)**2.0
+        MachSFn2PRight(iAlt,iSpecies) =  0.25*(MachSRight(iAlt,iSpecies) + 1.0)**2.0
 
-      MF2P_Left_P12(iAlt,iSpecies) =  0.25*(MLeft_P12(iAlt,iSpecies) + 1.0)**2.0
-      MF2N_Left_P12(iAlt,iSpecies) = -0.25*(MLeft_P12(iAlt,iSpecies) - 1.0)**2.0
-
-      MF2P_Right_P12(iAlt,iSpecies) =  0.25*(MRight_P12(iAlt,iSpecies) + 1.0)**2.0
-      MF2N_Right_P12(iAlt,iSpecies) = -0.25*(MRight_P12(iAlt,iSpecies) - 1.0)**2.0
-
+         MachSFn2NLeft(iAlt,iSpecies) = -0.25*( MachSLeft(iAlt,iSpecies) - 1.0)**2.0
+        MachSFn2NRight(iAlt,iSpecies) = -0.25*(MachSRight(iAlt,iSpecies) - 1.0)**2.0
      enddo 
   enddo 
+  ! M(4)
+  do iAlt = 0, nAlts
+    do iSpecies = 1, nSpecies
 
-
-!!! Begin 4th Order Mach Number Polynomials
-  do iSpecies = 1, nSpecies
-    do iAlt = 1, nAlts 
-      if ( abs(MLeft_M12(iAlt,iSpecies)) .ge. 1.0) then 
-         MF4P_Left_M12(iAlt,iSpecies) = MF1P_Left_M12(iAlt,iSpecies)
+      if ( abs(MachSLeft(iAlt,iSpecies)) .ge. 1.0) then 
+         MachSFn4PLeft(iAlt,iSpecies) = MachSFn1PLeft(iAlt,iSpecies)
       else
-         MF4P_Left_M12(iAlt,iSpecies) = MF2P_Left_M12(iAlt,iSpecies)*&
-                   (1.0 - 16.0*LiouBeta*MF2N_Left_M12(iAlt,iSpecies))
+         MachSFn4PLeft(iAlt,iSpecies) = MachSFn2PLeft(iAlt,iSpecies)*&
+                   (1.0 - 16.0*LiouBeta*MachSFn2NLeft(iAlt,iSpecies))
       endif 
-
-      if ( abs(MRight_M12(iAlt,iSpecies)) .ge. 1.0) then 
-         MF4N_Right_M12(iAlt,iSpecies) = MF1N_Right_M12(iAlt,iSpecies)
+!
+      if ( abs(MachSRight(iAlt,iSpecies)) .ge. 1.0) then 
+         MachSFn4NRight(iAlt,iSpecies) = MachSFn1NRight(iAlt,iSpecies)
       else
-         MF4N_Right_M12(iAlt,iSpecies) = MF2N_Right_M12(iAlt,iSpecies)*&
-                    (1.0 + 16.0*LiouBeta*MF2P_Right_M12(iAlt,iSpecies))
+         MachSFn4NRight(iAlt,iSpecies) = MachSFn2NRight(iAlt,iSpecies)*&
+                   (1.0 + 16.0*LiouBeta*MachSFn2PRight(iAlt,iSpecies))
       endif 
-
-      if ( abs(MLeft_P12(iAlt,iSpecies)) .ge. 1.0) then 
-         MF4P_Left_P12(iAlt,iSpecies) = MF1P_Left_P12(iAlt,iSpecies)
-      else
-         MF4P_Left_P12(iAlt,iSpecies) = MF2P_Left_P12(iAlt,iSpecies)*&
-                   (1.0 - 16.0*LiouBeta*MF2N_Left_P12(iAlt,iSpecies))
-      endif 
-
-      if ( abs(MRight_P12(iAlt,iSpecies)) .ge. 1.0) then 
-         MF4N_Right_P12(iAlt,iSpecies) = MF1N_Right_P12(iAlt,iSpecies)
-      else
-         MF4N_Right_P12(iAlt,iSpecies) = MF2N_Right_P12(iAlt,iSpecies)*&
-                    (1.0 + 16.0*LiouBeta*MF2P_Right_P12(iAlt,iSpecies))
-      endif 
-
-
     enddo 
   enddo 
 
-!!! Begin 2nd Order Mach Number Polynomials
-  do iSpecies = 1, nSpecies
-    do iAlt = 1, nAlts 
+  !!! Begin 2nd Order Mach Number Polynomials
+  !real, dimension(0:nAlts,1:nSpecies) ::  MachPressureSParamAUSM
+  do iAlt = 0, nAlts 
+   do iSpecies = 1, nSpecies 
+      ! Note that MPress varies as Kp*(g(M))* dPs/(rhos*as^2)
+      ! g(M) is a "shut off" for M > 1
+      ! in all cases rhos*as^2 ~ rhos*(Gamma*Ps/rhos) ~ Gamma*Ps 
+      ! now:  In the vertical direction
+      !
+      ! dPs/Ps ~ (1/Ps)*(dP/dr)*dr ~ -rhos*(grav)/(ns*kb*T)*dr  
+      ! Thus as M -> 0 and P approaches hydrostatic
+      ! Therefore MPress ~ Kp*ms*g*dr/(kb*T) (no units)
+      ! But we want this to vary as M^2 as a pressure flux as M->0
+      ! So we want APC Scalar as f(M) ~ Ms^2
+      ! Mp_APC ~ f(M)*Kp*dPs/(rhos*cs^2) -> Ms^2*Kp*(dr/Hs)
+!!!!! Hydrostatic Species Use This one
+      AUSMMachPressureParamS(iAlt,iSpecies) = &
+          KpSParam(iAlt,iSpecies)*max( (1.0 - MachSBar2(iAlt,iSpecies)), 0.0)*&
+         ( (PressureSRight(iAlt, iSpecies) - HydroPressureSRight(iAlt,iSpecies) ) - &
+           ( PressureSLeft(iAlt, iSpecies) -  HydroPressureSLeft(iAlt,iSpecies) ) )/&
+         ( MeanRhoS(iAlt,iSpecies)*InterfaceSoundSpeedS(iAlt,iSpecies)**2.0)
 
-       ! Note that MPress varies as Kp*(g(M))* dPs/(rhos*as^2)
-       ! g(M) is a "shut off" for M > 1
-       ! in all cases rhos*as^2 ~ rhos*(Gamma*Ps/rhos) ~ Gamma*Ps 
-       ! now:  In the vertical direction
-       !
-       ! dPs/Ps ~ (1/Ps)*(dP/dr)*dr ~ -rhos*(grav)/(ns*kb*T)*dr  
-       ! Thus as M -> 0 and P approaches hydrostatic
-       ! Therefore MPress ~ Kp*ms*g*dr/(kb*T) (no units)
-       ! But we want this to vary as M^2 as a pressure flux as M->0
-       ! So we want APC Scalar as f(M) ~ Ms^2
-       ! Mp_APC ~ f(M)*Kp*dPs/(rhos*cs^2) -> Ms^2*Kp*(dr/Hs)
-!!!! Hydrostatic Species Use This one
-       MPress_M12(iAlt,iSpecies) = &
-          LiouKpS_M12(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
-         ((PressureSRight_M12(iAlt, iSpecies) - &
-         HydroPressureSRight_M12(iAlt,iSpecies) ) - &
-         (PressureSLeft_M12(iAlt, iSpecies) - &
-          HydroPressureSLeft_M12(iAlt,iSpecies) ) )/ &
-         ( MeanRhoS_M12(iAlt,iSpecies)*SpeciesMeanCS_M12(iAlt,iSpecies)*SpeciesMeanCS_M12(iAlt,iSpecies) ) 
+   enddo !iSpecies = 1, nSpecies 
+  enddo !iAlt = 0, nAlts 
 
-       MPress_P12(iAlt,iSpecies) = &
-          LiouKpS_P12(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
-          (  (PressureSRight_P12(iAlt, iSpecies) - &
-          HydroPressureSRight_P12(iAlt,iSpecies) ) - &
-          (PressureSLeft_P12(iAlt, iSpecies) - &
-          HydroPressureSLeft_P12(iAlt,iSpecies) ) )/ &
-         ( MeanRhoS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies) ) 
+  do iAlt = 0, nAlts 
+     do iSpecies = 1, nSpecies
+        NumericalVertVelS(iAlt,iSpecies) = &
+          InterfaceSoundSpeedS(iAlt,iSpecies)*&
+          ( MachSFn4PLeft(iAlt,iSpecies) + &  
+           MachSFn4NRight(iAlt,iSpecies) - &  
+          AUSMMachPressureParamS(iAlt,iSpecies))
+     enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 0, nAlts 
 
-!!!!! Non-Hydrostatic Species Should use this version
+  do iAlt = 0, nAlts
+     do iSpecies = 1, nSpecies
+        NumericalPressureS(iAlt,iSpecies) = &
+             (MeanPressureS(iAlt,iSpecies) - &
+              MeanHydroPressureS(iAlt,iSpecies) )&
+           - 0.5*KuSParam(iAlt,iSpecies)*InterfaceSoundSpeedS(iAlt,iSpecies)*&
+              ( RhoSRight(iAlt,iSpecies)*VertVelSRight(iAlt,iSpecies) - &
+                 RhoSLeft(iAlt,iSpecies)* VertVelSLeft(iAlt,iSpecies) )
 
-       if (.not. SubtractHydrostatic(iAlt,iSpecies)) then
-
-       MPress_P12(iAlt,iSpecies) = &
-          LiouKpS_P12(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
-          (PressureSRight_P12(iAlt, iSpecies) - PressureSLeft_P12(iAlt,iSpecies) )/&
-         ( MeanRhoS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies) ) 
-
-       MPress_M12(iAlt,iSpecies) = &
-          LiouKpS_M12(iAlt,iSpecies)*max( (1.0 - M2Bar_P12(iAlt,iSpecies)), 0.0)*&
-         (PressureSRight_M12(iAlt, iSpecies) - PressureSLeft_M12(iAlt,iSpecies) )/&
-         ( MeanRhoS_M12(iAlt,iSpecies)*SpeciesMeanCS_M12(iAlt,iSpecies)*SpeciesMeanCS_M12(iAlt,iSpecies) ) 
-
-
-        endif 
-     enddo ! iSpecies
-   enddo ! iAlt
-
-
-   do iAlt = 1, nAlts 
-      do iSpecies = 1, nSpecies
-
-          InterfaceMach_M12(iAlt,iSpecies) =  &
-                 MF4P_Left_M12(iAlt,iSpecies) + MF4N_Right_M12(iAlt,iSpecies) &
-                    - MPress_M12(iAlt,iSpecies)
-
-          LiouNumericalVelocity_M12(iAlt,iSpecies) = &
-                   SpeciesMeanCS_M12(iAlt,iSpecies)*InterfaceMach_M12(iAlt,iSpecies) 
-
-          InterfaceMach_P12(iAlt,iSpecies) =  &
-                 MF4P_Left_P12(iAlt,iSpecies) + MF4N_Right_P12(iAlt,iSpecies) &
-                    - MPress_P12(iAlt,iSpecies)
- 
-          LiouNumericalVelocity_P12(iAlt,iSpecies) = &
-                   SpeciesMeanCS_P12(iAlt,iSpecies)*InterfaceMach_P12(iAlt,iSpecies) 
-      enddo ! iSpecies 
-   enddo  ! iAlt
-
-      NumericalVelocity_M12(1:nAlts,1:nSpecies) = &
-  LiouNumericalVelocity_M12(1:nAlts,1:nSpecies)
-
-      NumericalVelocity_P12(1:nAlts,1:nSpecies) = &
-  LiouNumericalVelocity_P12(1:nAlts,1:nSpecies)
-
-
-!! NUMERICAL PRESSURE
-  do iSpecies = 1, nSpecies
-       do iAlt = 1, nAlts
-
-             NumericalPressure_P12(iAlt,iSpecies) = &
-                  (MeanPressureS_P12(iAlt,iSpecies) - &
-              MeanHydroPressureS_P12(iAlt,iSpecies) )&
-                - 0.5*LiouKuS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*&
-               ( (RhoSRight_P12(iAlt,iSpecies) )*VelRight_P12(iAlt,iSpecies) - &
-                  (RhoSLeft_P12(iAlt,iSpecies) )* VelLeft_P12(iAlt,iSpecies) )
-
-             NumericalPressure_M12(iAlt,iSpecies) = &
-               (MeanPressureS_M12(iAlt,iSpecies) - &
-           MeanHydroPressureS_M12(iAlt,iSpecies) )&
-                - 0.5*LiouKuS_M12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*&
-               ( (RhoSRight_M12(iAlt,iSpecies) )*VelRight_M12(iAlt,iSpecies) - &
-                  (RhoSLeft_M12(iAlt,iSpecies) )* VelLeft_M12(iAlt,iSpecies) )
-
-      
-       if (.not. SubtractHydrostatic(iAlt,iSpecies)) then
-
-             NumericalPressure_P12(iAlt,iSpecies) = &
-               (MeanPressureS_P12(iAlt,iSpecies) )&
-                - 0.5*LiouKuS_P12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*&
-               ( (RhoSRight_P12(iAlt,iSpecies) )*VelRight_P12(iAlt,iSpecies) - &
-                  (RhoSLeft_P12(iAlt,iSpecies) )* VelLeft_P12(iAlt,iSpecies) )
-
-             NumericalPressure_M12(iAlt,iSpecies) = &
-               (MeanPressureS_M12(iAlt,iSpecies) )&
-                - 0.5*LiouKuS_M12(iAlt,iSpecies)*SpeciesMeanCS_P12(iAlt,iSpecies)*&
-               ( (RhoSRight_M12(iAlt,iSpecies) )*VelRight_M12(iAlt,iSpecies) - &
-                  (RhoSLeft_M12(iAlt,iSpecies) )* VelLeft_M12(iAlt,iSpecies) )
-
-       endif 
-           
-       enddo !!iAlt = 1, nAlts
-  enddo !!! nSpecies
-
+     enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 1, nAlts
 
   do iSpecies = 1, nSpecies
-     do iAlt = 1, nAlts 
-        if (NumericalVelocity_P12(iAlt,iSpecies) .ge. 0.0) then 
-           RhoSFlux_P12(iAlt,iSpecies) = &
-               (RhoSLeft_P12(iAlt,iSpecies)*NumericalVelocity_P12(iAlt,iSpecies)) 
+     do iAlt = 0, nAlts 
+        if (NumericalVertVelS(iAlt,iSpecies) .ge. 0.0) then 
+            RhoSFlux(iAlt,iSpecies) = &
+               RhoSLeft(iAlt,iSpecies)*NumericalVertVelS(iAlt,iSpecies)
 
-           MomentumSFlux_P12(iAlt,iSpecies) = &
-               (RhoSLeft_P12(iAlt,iSpecies)*VelLeft_P12(iAlt,iSpecies)*&
-               NumericalVelocity_P12(iAlt,iSpecies)) 
+            MomentumSFlux(iAlt,iSpecies) = &
+                RhoSLeft(iAlt,iSpecies)*VertVelSLeft(iAlt,iSpecies)*&
+                NumericalVertVelS(iAlt,iSpecies) 
         else
-           RhoSFlux_P12(iAlt,iSpecies) = &
-               (RhoSRight_P12(iAlt,iSpecies)*NumericalVelocity_P12(iAlt,iSpecies)) 
+            RhoSFlux(iAlt,iSpecies) = &
+               RhoSRight(iAlt,iSpecies)*NumericalVertVelS(iAlt,iSpecies)
 
-           MomentumSFlux_P12(iAlt,iSpecies) = &
-               (RhoSRight_P12(iAlt,iSpecies)*VelRight_P12(iAlt,iSpecies)*&
-               NumericalVelocity_P12(iAlt,iSpecies)) 
-        endif
-        if (NumericalVelocity_M12(iAlt,iSpecies) .ge. 0.0) then 
-           RhoSFlux_M12(iAlt,iSpecies) = &
-               (RhoSLeft_M12(iAlt,iSpecies)*NumericalVelocity_M12(iAlt,iSpecies)) 
-
-           MomentumSFlux_M12(iAlt,iSpecies) = &
-               (RhoSLeft_M12(iAlt,iSpecies)*VelLeft_M12(iAlt,iSpecies)*&
-               NumericalVelocity_M12(iAlt,iSpecies)) 
-        else
-           RhoSFlux_M12(iAlt,iSpecies) = &
-               (RhoSRight_M12(iAlt,iSpecies)*NumericalVelocity_M12(iAlt,iSpecies)) 
-
-           MomentumSFlux_M12(iAlt,iSpecies) = &
-               (RhoSRight_M12(iAlt,iSpecies)*VelRight_M12(iAlt,iSpecies)*&
-               NumericalVelocity_M12(iAlt,iSpecies)) 
+            MomentumSFlux(iAlt,iSpecies) = &
+                RhoSRight(iAlt,iSpecies)*VertVelSRight(iAlt,iSpecies)*&
+                NumericalVertVelS(iAlt,iSpecies) 
         endif
      enddo 
   enddo 
 
+  BulkNumericalVertVel(0:nAlts) = 0.0
+  do iSpecies = 1, nSpecies
+     BulkNumericalVertVel = &
+     BulkNumericalVertVel + &
+           ( RhoSLeft(:,iSpecies) + RhoSRight(:,iSpecies) )*&
+             NumericalVertVelS(:,iSpecies)/&
+             (RhoLeft + RhoRight )
+  enddo 
 
-    BulkNumericalVelocity_P12(1:nAlts) = 0.0
-    BulkNumericalVelocity_M12(1:nAlts) = 0.0
+  do iAlt = 0, nAlts 
+     if (BulkNumericalVertVel(iAlt) .ge. 0.0) then 
+        EnergyFlux(iAlt) = &
+          ( EnergyLeft(iAlt) + PressureLeft(iAlt) ) &
+            *BulkNumericalVertVel(iAlt) 
 
-    do iSpecies = 1, nSpecies
-        BulkNumericalVelocity_P12(1:nAlts) = &
-        BulkNumericalVelocity_P12(1:nAlts) + &
-           ( RhoSLeft_P12(1:nAlts,iSpecies) + RhoSRight_P12(1:nAlts,iSpecies) )*&
-             NumericalVelocity_P12(1:nAlts,iSpecies)/&
-             (RhoLeft_P12(1:nAlts) + RhoRight_P12(1:nAlts) )
+        MomentumFlux(iAlt,1:3) = &
+             RhoLeft(iAlt)*VelGDLeft(iAlt,1:3)*&
+             BulkNumericalVertVel(iAlt) 
+     else
+        EnergyFlux(iAlt) = &
+          ( EnergyRight(iAlt) + PressureRight(iAlt) ) &
+            *BulkNumericalVertVel(iAlt) 
 
-        BulkNumericalVelocity_M12(1:nAlts) = &
-        BulkNumericalVelocity_M12(1:nAlts) + &
-           ( RhoSLeft_M12(1:nAlts,iSpecies) + RhoSRight_M12(1:nAlts,iSpecies) )*&
-             NumericalVelocity_M12(1:nAlts,iSpecies)/&
-             (RhoLeft_M12(1:nAlts) + RhoRight_M12(1:nAlts) )
-    enddo 
+        MomentumFlux(iAlt,1:3) = &
+             RhoRight(iAlt)*VelGDRight(iAlt,1:3)*&
+             BulkNumericalVertVel(iAlt) 
+     endif
+  enddo 
 
+  ! Define Cell Volumes and radial Areas
+  do iAlt = 1, nAlts
+     AreaFunction_P12(iAlt) = Area_P12(iAlt)
+     AreaFunction_M12(iAlt) = Area_M12(iAlt)
+     LocalCellVolume(iAlt) = CellVol1D(iAlt)
+  enddo 
 
-    do iAlt = 1, nAlts 
-       if (BulkNumericalVelocity_P12(iAlt) .ge. 0.0) then 
-           EnergyFlux_P12(iAlt) = &
-             ( ELeft_P12(iAlt) + PLeft_P12(iAlt) ) &
-               *BulkNumericalVelocity_P12(iAlt) 
+  ! Divergence of Fluxes
+  do iAlt = 1, nAlts
+     do iSpecies = 1, nSpecies
+        DivRhoSFlux(iAlt,iSpecies) = &
+          ( AreaFunction_P12(iAlt)*RhoSFlux(iAlt  ,iSpecies) - &
+            AreaFunction_M12(iAlt)*RhoSFlux(iAlt-1,iSpecies) )/&
+            LocalCellVolume(iAlt)
+        DivMomentumSFlux(iAlt,iSpecies) = &
+          ( AreaFunction_P12(iAlt)*MomentumSFlux(iAlt  ,iSpecies) - &
+            AreaFunction_M12(iAlt)*MomentumSFlux(iAlt-1,iSpecies) )/&
+            LocalCellVolume(iAlt)
+        ! Add PRessure Gradient
+        DivMomentumSFlux(iAlt,iSpecies) = &
+        DivMomentumSFlux(iAlt,iSpecies) + &
+           (NumericalPressureS(iAlt   ,iSpecies) - &
+            NumericalPressureS(iAlt-1,iSpecies))/dAlt_C(iAlt)
+     enddo !iAlt
+     DivMomentumFlux(iAlt,1:3) = &
+          ( AreaFunction_P12(iAlt)*MomentumFlux(iAlt  ,1:3) - &
+            AreaFunction_M12(iAlt)*MomentumFlux(iAlt-1,1:3) )/&
+            LocalCellVolume(iAlt)
+     DivEnergyFlux(iAlt) = &
+          ( AreaFunction_P12(iAlt)*EnergyFlux(iAlt  ) - &
+            AreaFunction_M12(iAlt)*EnergyFlux(iAlt-1) )/&
+            LocalCellVolume(iAlt)
 
-           Momentum_P12(iAlt,1:3) = &
-                RhoLeft_P12(iAlt)*VelGDLeft_P12(iAlt,1:3)*&
-                BulkNumericalVelocity_P12(iAlt) 
-       else
-           EnergyFlux_P12(iAlt) = &
-             ( ERight_P12(iAlt) + PRight_P12(iAlt) ) &
-               *BulkNumericalVelocity_P12(iAlt) 
-
-           Momentum_P12(iAlt,1:3) = &
-                RhoRight_P12(iAlt)*VelGDRight_P12(iAlt,1:3)*&
-                BulkNumericalVelocity_P12(iAlt) 
-       endif
-       if (BulkNumericalVelocity_M12(iAlt) .ge. 0.0) then 
-           EnergyFlux_M12(iAlt) = &
-             ( ELeft_M12(iAlt) + PLeft_M12(iAlt) ) &
-               *BulkNumericalVelocity_M12(iAlt) 
-
-           Momentum_M12(iAlt,1:3) = &
-                RhoLeft_M12(iAlt)*VelGDLeft_M12(iAlt,1:3)*&
-                BulkNumericalVelocity_M12(iAlt) 
-       else
-           EnergyFlux_M12(iAlt) = &
-             ( ERight_M12(iAlt) + PRight_M12(iAlt) ) &
-               *BulkNumericalVelocity_M12(iAlt) 
-
-           Momentum_M12(iAlt,1:3) = &
-                RhoRight_M12(iAlt)*VelGDRight_M12(iAlt,1:3)*&
-                BulkNumericalVelocity_M12(iAlt) 
-       endif
-    enddo !! End iAlt Loop 
-
-
-    do iAlt = 1, nAlts
-          LeftRadius(iAlt) = 0.5*(RadDist(iAlt) + RadDist(iAlt-1))
-          RightRadius(iAlt) = 0.5*(RadDist(iAlt) + RadDist(iAlt+1))
-    enddo 
-
-    do iAlt = 1, nAlts
-          !AreaFunction_P12(iAlt) = RightRadius(iAlt)**2.0
-          !AreaFunction_M12(iAlt) = LeftRadius(iAlt)**2.0
-          !LocalCellVolume(iAlt) = &
-          !   (1.0/3.0)*(RightRadius(iAlt)**3.0 - LeftRadius(iAlt)**3.0)
-          AreaFunction_P12(iAlt) = Area_P12(iAlt)
-          AreaFunction_M12(iAlt) = Area_M12(iAlt)
-          LocalCellVolume(iAlt) = CellVol1D(iAlt)
-    enddo 
-
-    do iSpecies = 1, nSpecies
-       RhoSFlux(1:nAlts,iSpecies) = &
-            ( (AreaFunction_P12(1:nAlts))*RhoSFlux_P12(1:nAlts,iSpecies) - &
-              (AreaFunction_M12(1:nAlts))*RhoSFlux_M12(1:nAlts,iSpecies) )/&
-              LocalCellVolume(1:nAlts)
-
-       MomentumSFlux(1:nAlts,iSpecies) = &
-            ( (AreaFunction_P12(1:nAlts))*MomentumSFlux_P12(1:nAlts,iSpecies) - &
-              (AreaFunction_M12(1:nAlts))*MomentumSFlux_M12(1:nAlts,iSpecies) )/&
-              LocalCellVolume(1:nAlts)
-
-       MomentumSFlux(1:nAlts,iSpecies) = &
-       MomentumSFlux(1:nAlts,iSpecies) + &
-           (NumericalPressure_P12(1:nAlts,iSpecies) - &
-            NumericalPressure_M12(1:nAlts,iSpecies))/dAlt_C(1:nAlts)
-    enddo 
-
-    EnergyFlux(1:nAlts) = &
-         ( (AreaFunction_P12(1:nAlts))*EnergyFlux_P12(1:nAlts) - &
-           (AreaFunction_M12(1:nAlts))*EnergyFlux_M12(1:nAlts))/&
-           LocalCellVolume(1:nAlts)
-
-     do iDim = 1, 3
-       MomentumFlux(1:nAlts,iDim) = &
-            ( AreaFunction_P12(1:nAlts)*Momentum_P12(1:nAlts,iDim) - &
-              AreaFunction_M12(1:nAlts)*Momentum_M12(1:nAlts,iDim))/&
-              LocalCellVolume(1:nAlts)
-     enddo 
+  enddo !iSpecies = 1, nSpecies
 
 end subroutine calc_all_fluxes_hydro
 
 
- subroutine calc_kt_facevalues(Var, VarLeft_M12, VarRight_M12, &
-                                    VarLeft_P12, VarRight_P12)
- 
- 
+ subroutine calc_tvd_facevalues(Var, VarLeft, VarRight)
    use ModVertical, only: dAlt_F, InvDAlt_F
    use ModSizeGITM, only: nAlts
    use ModLimiterGitm
@@ -2127,39 +1613,363 @@ end subroutine calc_all_fluxes_hydro
    implicit none
    
    real, intent(in) :: Var(-1:nAlts+2)
-   real, intent(out):: VarLeft_P12(1:nAlts), VarRight_P12(1:nAlts)
-   real, intent(out):: VarLeft_M12(1:nAlts), VarRight_M12(1:nAlts)
+   real, intent(out):: VarLeft(0:nAlts), VarRight(0:nAlts)
  
    real :: dVarUp, dVarDown, dVarLimited(0:nAlts+1)
  
    integer :: i
+   ! Currently we have Var(i) corresponds to the interface between (i) and (i+1)
+   !   |         |                  |                          |                  |
+   !   |  UL(0)->|<-UR(0); UL(1) -> |<- UR(1) ....   UL(N-1)-> |<-UR(N-1); UL(N)->|<-UR(N) 
+   !   |         |                  |              i=nAlts-1   |                  |
+   !      i = 0        i = 1
 
-!!!!!! TREAT THE LOWER BOUNDARY SEPARATELY
-!        write(*,*) 'IN CALC_FACEVALUES'
+   do i=0,nAlts+1
+        dVarUp            = (Var(i+1) - Var(i  )) * InvDAlt_F(i+1)
+        dVarDown          = (Var(i  ) - Var(i-1)) * InvDAlt_F(i  )
+        dVarLimited(i) = Limiter_mc(dVarUp, dVarDown)
+   end do
 
-        do i=0,nAlts+1
-             dVarUp            = (Var(i+1) - Var(i  ))   * InvDAlt_F(i+1)
-             dVarDown          = (Var(i  ) - Var(i-1)) * InvDAlt_F(i)
-             dVarLimited(i) = Limiter_mc(dVarUp, dVarDown)
-        end do
+   do i = 0, nAlts
+       VarLeft(i) = Var(i  ) + 0.5*dVarLimited(i  )*dAlt_F(i+1)
+      VarRight(i) = Var(i+1) - 0.5*dVarLimited(i+1)*dAlt_F(i+1)
+   enddo !i = 0, nAlts
 
-        do i=1,nAlts
-            VarLeft_M12(i) = Var(i-1) + 0.5*dVarLimited(i-1) * dAlt_F(i-1)
-           VarRight_M12(i) = Var(i  ) - 0.5*dVarLimited(i  ) * dAlt_F(i  )
-      
-            VarLeft_P12(i) = Var(i  ) + 0.5*dVarLimited(i  ) * dAlt_F(i  )
-           VarRight_P12(i) = Var(i+1) - 0.5*dVarLimited(i+1) * dAlt_F(i+1)
-        end do
+ end subroutine calc_tvd_facevalues
+
+ subroutine calc_weno_facevalues(Var, VarLeft, VarRight)
  
+   use ModVertical, only: &
+       dAlt_F, dAlt_C, InvDAlt_F, Altitude_G, &
+       Mesh_ULP120, Mesh_ULP121, Mesh_ULP122, &
+       Mesh_CLP120, Mesh_CLP121, Mesh_CLP122, &
+       Mesh_URM120, Mesh_URM121, Mesh_URM122, &
+       Mesh_CRM120, Mesh_CRM121, Mesh_CRM122, &
+       UB_MeshCoefs, LB_MeshCoefs, &
+       Mesh_IS0, Mesh_IS1, Mesh_IS2
+     
+   use ModSizeGITM, only: nAlts
+   use ModLimiterGitm
  
-!        do i=1,nAlts
-!            VarLeft_M12(i) = Var(i-1) + 0.5*dVarLimited(i-1) * dAlt_F(i  )
-!           VarRight_M12(i) = Var(i  ) - 0.5*dVarLimited(i  ) * dAlt_F(i  )
-!      
-!            VarLeft_P12(i) = Var(i  ) + 0.5*dVarLimited(i  ) * dAlt_F(i+1)
-!           VarRight_P12(i) = Var(i+1) - 0.5*dVarLimited(i+1) * dAlt_F(i+1)
-!        end do
+   implicit none
+   
+   real, intent(in) :: Var(-1:nAlts+2)
+   real, intent(out):: VarLeft(0:nAlts), VarRight(0:nAlts)
+ 
+   real :: UL_P120, UL_P121, UL_P122
+   real :: UR_M120, UR_M121, UR_M122
+   real :: CL_P120, CL_P121, CL_P122
+   real :: CR_M120, CR_M121, CR_M122
+   real :: X_P12, X_P32, X_P52
+   real :: X_M12, X_M32, X_M52
+   real :: IS0, IS1, IS2
+   real :: IS0Z, IS1Z, IS2Z
+   real :: TRis
+   real :: Alpha_P0, Alpha_P1, Alpha_P2
+   real :: Alpha_M0, Alpha_M1, Alpha_M2
+   real :: W_P0, W_P1, W_P2
+   real :: W_M0, W_M1, W_M2
+   integer :: i, k,iAlt
+   real :: RISk
+   real :: WENOEpsilon
+   !------------ USE THESE FOR THE FAST VERSION --------------
+   real :: C_P120, C_P121, C_P122
+   real :: C_M120, C_M121, C_M122
+   !-------
+   real :: DenominatorL, DenominatorR
 
- end subroutine calc_kt_facevalues
+!!! Use for 4-th Order Backward Differences
+!!! Need a 5-point Stencil
+  real :: dVar
+  real :: LocalVar(-2:nAlts+3)  ! Need this for extrapolation
+  real :: LocalVarLeft(0:nAlts), LocalVarRight(0:nAlts)
+!  real :: LocalVarLeft_M12(0:nAlts+1), LocalVarRight_M12(0:nAlts+1)
+!  real :: LocalVarLeft_P12(0:nAlts+1), LocalVarRight_P12(0:nAlts+1)
+  ! WENOZ  - Factors
+  real :: Tau5Z
+  LocalVar(-1:nAlts+2) = Var(-1:nAlts+2)
+  ! =\ 
+  ! ==\
+  ! Extend Local Vars upward and downward
+  iAlt = -2
+  dVar  = LB_MeshCoefs(1,1)*Var(iAlt+1) + &  
+          LB_MeshCoefs(1,2)*Var(iAlt+2) + &  
+          LB_MeshCoefs(1,3)*Var(iAlt+3) + &  
+          LB_MeshCoefs(1,4)*Var(iAlt+4) + &  
+          LB_MeshCoefs(1,5)*Var(iAlt+5)      
+  LocalVar(iAlt) = Var(iAlt+1) - dAlt_F(iAlt+1)*dVar 
+
+  iAlt = nAlts + 3
+  dVar  = UB_MeshCoefs(3,1)*Var(iAlt-1) + &  
+          UB_MeshCoefs(3,2)*Var(iAlt-2) + &  
+          UB_MeshCoefs(3,3)*Var(iAlt-3) + &  
+          UB_MeshCoefs(3,4)*Var(iAlt-4) + &  
+          UB_MeshCoefs(3,5)*Var(iAlt-5)      
+  LocalVar(iAlt) = LocalVar(iAlt-1) + dVar*dAlt_F(iAlt-1)
+
+  ! Use WENO Reconstruction
+  !WENOEpsilon = 1.0e-6
+  WENOEpsilon = 1.0e-2
+  do iAlt=1,nAlts
+      UL_P120 = &
+        Mesh_ULP120(iAlt,1)*   & 
+                LocalVar(iAlt+1)  + &
+        Mesh_ULP120(iAlt,2)*   &
+                (LocalVar(iAlt) - LocalVar(iAlt+1)) - &
+        Mesh_ULP120(iAlt,3)*   &
+                (LocalVar(iAlt+2) - LocalVar(iAlt+1))
+!          
+      UL_P121 = &
+        Mesh_ULP121(iAlt,1)*   & 
+                   LocalVar(iAlt  ) + &
+        Mesh_ULP121(iAlt,2)*   &
+               (LocalVar(iAlt+1) - LocalVar(iAlt  )) - &
+        Mesh_ULP121(iAlt,3)*   &
+                (LocalVar(iAlt-1) - LocalVar(iAlt  )) 
+
+      UL_P122 = &
+        Mesh_ULP122(iAlt,1)*   & 
+                   LocalVar(iAlt-1) + &
+        Mesh_ULP122(iAlt,2)*   &
+               (LocalVar(iAlt-2) - LocalVar(iAlt-1)) + &
+        Mesh_ULP122(iAlt,3)*   &
+               (LocalVar(iAlt  ) - LocalVar(iAlt-1)) 
+       
+      UR_M120 = &
+        Mesh_URM120(iAlt,1)*   & 
+                   LocalVar(iAlt+1) + &
+        Mesh_URM120(iAlt,2)*   &
+                (LocalVar(iAlt  ) - LocalVar(iAlt+1)) + & 
+        Mesh_URM120(iAlt,3)*   &
+                (LocalVar(iAlt+2) - LocalVar(iAlt+1)) 
+
+      UR_M121 = &
+        Mesh_URM121(iAlt,1)*   & 
+                   LocalVar(iAlt  ) + &
+        Mesh_URM121(iAlt,2)*   &
+                  (LocalVar(iAlt-1) - LocalVar(iAlt  )) - &
+        Mesh_URM121(iAlt,3)*   &
+                  (LocalVar(iAlt+1) - LocalVar(iAlt  )) 
+       
+      UR_M122 = &
+        Mesh_URM122(iAlt,1)*   & 
+                   LocalVar(iAlt-1) + &
+        Mesh_URM122(iAlt,2)*   &
+                  (LocalVar(iAlt) - LocalVar(iAlt-1)) - &
+        Mesh_URM122(iAlt,3)*   &
+                  (LocalVar(iAlt-2) - LocalVar(iAlt-1)) 
+
+      CL_P120 = Mesh_CLP120(iAlt)
+      CL_P121 = Mesh_CLP121(iAlt)
+      CL_P122 = Mesh_CLP122(iAlt)
+
+      CR_M120 = Mesh_CRM120(iAlt)
+      CR_M121 = Mesh_CRM121(iAlt)
+      CR_M122 = Mesh_CRM122(iAlt)
+
+      IS0 = Mesh_IS0(iAlt,1)*&
+            (LocalVar(iAlt+2) - LocalVar(iAlt+1))**2.0 + &
+            Mesh_IS0(iAlt,2)*&
+            ((LocalVar(iAlt+2) - LocalVar(iAlt+1))*(LocalVar(iAlt) - LocalVar(iAlt+1))) + &
+            Mesh_IS0(iAlt,3)*&
+            ((LocalVar(iAlt  ) - LocalVar(iAlt+1))**2.0)
+            
+      IS1 = Mesh_IS1(iAlt,1)*&
+            (LocalVar(iAlt-1) - LocalVar(iAlt  ))**2.0 + &
+            Mesh_IS1(iAlt,2)*&
+            ((LocalVar(iAlt+1) - LocalVar(iAlt  ))*(LocalVar(iAlt-1) - LocalVar(iAlt))) + &
+            Mesh_IS1(iAlt,3)*&
+            ((LocalVar(iAlt+1) - LocalVar(iAlt  ))**2.0)
+
+      IS2 = Mesh_IS2(iAlt,1)*&
+            (LocalVar(iAlt-2) - LocalVar(iAlt-1))**2.0 + &
+            Mesh_IS2(iAlt,2)*&
+            ((LocalVar(iAlt  ) - LocalVar(iAlt-1))*(LocalVar(iAlt-2) - LocalVar(iAlt-1))) + &
+            Mesh_IS2(iAlt,3)*&
+            ((LocalVar(iAlt  ) - LocalVar(iAlt-1))**2.0)
+
+      Tau5Z = abs(IS0 - IS2)
+
+      Alpha_P0 = CL_P120*(1.0 + (Tau5Z/(IS0  + WENOEpsilon))**2.0)
+      Alpha_P1 = CL_P121*(1.0 + (Tau5Z/(IS1  + WENOEpsilon))**2.0)
+      Alpha_P2 = CL_P122*(1.0 + (Tau5Z/(IS2  + WENOEpsilon))**2.0)
+
+      Alpha_M0 = CR_M120*(1.0 + (Tau5Z/(IS0  + WENOEpsilon))**2.0)
+      Alpha_M1 = CR_M121*(1.0 + (Tau5Z/(IS1  + WENOEpsilon))**2.0)
+      Alpha_M2 = CR_M122*(1.0 + (Tau5Z/(IS2  + WENOEpsilon))**2.0)
+
+      DenominatorL = Alpha_P0 + Alpha_P1 + Alpha_P2
+      DenominatorR = Alpha_M0 + Alpha_M1 + Alpha_M2
+
+      W_P0 = Alpha_P0/DenominatorL
+      W_P1 = Alpha_P1/DenominatorL
+      W_P2 = Alpha_P2/DenominatorL
+
+      W_M0 = Alpha_M0/DenominatorR
+      W_M1 = Alpha_M1/DenominatorR
+      W_M2 = Alpha_M2/DenominatorR
+
+      ! For a given "i" we calculate the inner faces of the cell
+      ! That is we interpolate to the right-face of the -1/2 edge
+      ! That is we interpolate to the left-face  of the +1/2 edge
+      ! Let's define
+      !     U(i)          = LocalVar(i)
+      !     UL_P12/M12(i) = LocalVarLeft_P12(i)/LocalVarLeft_M12(i)
+      !     UR_P12/M12(i) = LocalVarRight_P12(i)/LocalVarRight_M12(i)
+      !      (i-1)        |               (i)                |       (i+1)
+      !                   | UR(i)  <----- U(i) ----->  UL(i) |
+      !  Old Notation
+      !                   | UR_M12(i)  <--U(i) --> UL_P12(i) |
+      !   Old Scheme (i) ranged from i = 1, nAlts
+      !
+      !  New Notation
+      !                   | UR(i-1)    <--U(i) --> UL(i)     |
+      !   New Scheme (i) ranges from i = 0, nAlts
+      !   In New Scheme (Special Cases):  i = 0:  
+
+!       LocalVarLeft_P12(iAlt  ) = W_P0*UL_P120 + W_P1*UL_P121 + W_P2*UL_P122
+!      LocalVarRight_M12(iAlt  ) = W_M0*UR_M120 + W_M1*UR_M121 + W_M2*UR_M122
+
+       LocalVarLeft(iAlt  ) = W_P0*UL_P120 + W_P1*UL_P121 + W_P2*UL_P122
+      LocalVarRight(iAlt-1) = W_M0*UR_M120 + W_M1*UR_M121 + W_M2*UR_M122
+   enddo !i=1,nAlts
+
+   ! Special Cases
+   iAlt = 0
+   UL_P120 = &
+        Mesh_ULP120(iAlt,1)*   & 
+                LocalVar(iAlt+1)  + &
+        Mesh_ULP120(iAlt,2)*   &
+                (LocalVar(iAlt) - LocalVar(iAlt+1)) - &
+        Mesh_ULP120(iAlt,3)*   &
+                (LocalVar(iAlt+2) - LocalVar(iAlt+1))
+!          
+   UL_P121 = &
+        Mesh_ULP121(iAlt,1)*   & 
+                   LocalVar(iAlt  ) + &
+        Mesh_ULP121(iAlt,2)*   &
+               (LocalVar(iAlt+1) - LocalVar(iAlt  )) - &
+        Mesh_ULP121(iAlt,3)*   &
+                (LocalVar(iAlt-1) - LocalVar(iAlt  )) 
+
+   UL_P122 = &
+        Mesh_ULP122(iAlt,1)*   &
+                   LocalVar(iAlt-1) + &
+        Mesh_ULP122(iAlt,2)*   &
+               (LocalVar(iAlt-2) - LocalVar(iAlt-1)) + &
+        Mesh_ULP122(iAlt,3)*   &
+               (LocalVar(iAlt  ) - LocalVar(iAlt-1)) 
+       
+   CL_P120 = Mesh_CLP120(iAlt)
+   CL_P121 = Mesh_CLP121(iAlt)
+   CL_P122 = Mesh_CLP122(iAlt)
+
+   IS0 = Mesh_IS0(iAlt,1)*&
+         (LocalVar(iAlt+2) - LocalVar(iAlt+1))**2.0 + &
+         Mesh_IS0(iAlt,2)*&
+         ((LocalVar(iAlt+2) - LocalVar(iAlt+1))*(LocalVar(iAlt) - LocalVar(iAlt+1))) + &
+         Mesh_IS0(iAlt,3)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt+1))**2.0)
+            
+   IS1 = Mesh_IS1(iAlt,1)*&
+         (LocalVar(iAlt-1) - LocalVar(iAlt  ))**2.0 + &
+         Mesh_IS1(iAlt,2)*&
+         ((LocalVar(iAlt+1) - LocalVar(iAlt  ))*(LocalVar(iAlt-1) - LocalVar(iAlt))) + &
+         Mesh_IS1(iAlt,3)*&
+         ((LocalVar(iAlt+1) - LocalVar(iAlt  ))**2.0)
+
+   IS2 = Mesh_IS2(iAlt,1)*&
+         (LocalVar(iAlt-2) - LocalVar(iAlt-1))**2.0 + &
+         Mesh_IS2(iAlt,2)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt-1))*(LocalVar(iAlt-2) - LocalVar(iAlt-1))) + &
+         Mesh_IS2(iAlt,3)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt-1))**2.0)
+
+   Tau5Z = abs(IS0 - IS2)
+
+   Alpha_P0 = CL_P120*(1.0 + (Tau5Z/(IS0  + WENOEpsilon))**2.0)
+   Alpha_P1 = CL_P121*(1.0 + (Tau5Z/(IS1  + WENOEpsilon))**2.0)
+   Alpha_P2 = CL_P122*(1.0 + (Tau5Z/(IS2  + WENOEpsilon))**2.0)
+
+   DenominatorL = Alpha_P0 + Alpha_P1 + Alpha_P2
+
+   W_P0 = Alpha_P0/DenominatorL
+   W_P1 = Alpha_P1/DenominatorL
+   W_P2 = Alpha_P2/DenominatorL
+
+   LocalVarLeft(iAlt  ) = W_P0*UL_P120 + W_P1*UL_P121 + W_P2*UL_P122
+
+
+   iAlt = nAlts+1
+   UR_M120 = &
+     Mesh_URM120(iAlt,1)*   & 
+                LocalVar(iAlt+1) + &
+     Mesh_URM120(iAlt,2)*   &
+             (LocalVar(iAlt  ) - LocalVar(iAlt+1)) + & 
+     Mesh_URM120(iAlt,3)*   &
+             (LocalVar(iAlt+2) - LocalVar(iAlt+1)) 
+
+   UR_M121 = &
+     Mesh_URM121(iAlt,1)*   & 
+                LocalVar(iAlt  ) + &
+     Mesh_URM121(iAlt,2)*   &
+               (LocalVar(iAlt-1) - LocalVar(iAlt  )) - &
+     Mesh_URM121(iAlt,3)*   &
+               (LocalVar(iAlt+1) - LocalVar(iAlt  )) 
+       
+   UR_M122 = &
+     Mesh_URM122(iAlt,1)*   & 
+                LocalVar(iAlt-1) + &
+     Mesh_URM122(iAlt,2)*   &
+               (LocalVar(iAlt) - LocalVar(iAlt-1)) - &
+     Mesh_URM122(iAlt,3)*   &
+               (LocalVar(iAlt-2) - LocalVar(iAlt-1)) 
+
+   CR_M120 = Mesh_CRM120(iAlt)
+   CR_M121 = Mesh_CRM121(iAlt)
+   CR_M122 = Mesh_CRM122(iAlt)
+
+   IS0 = Mesh_IS0(iAlt,1)*&
+         (LocalVar(iAlt+2) - LocalVar(iAlt+1))**2.0 + &
+         Mesh_IS0(iAlt,2)*&
+         ((LocalVar(iAlt+2) - LocalVar(iAlt+1))*(LocalVar(iAlt) - LocalVar(iAlt+1))) + &
+         Mesh_IS0(iAlt,3)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt+1))**2.0)
+            
+   IS1 = Mesh_IS1(iAlt,1)*&
+         (LocalVar(iAlt-1) - LocalVar(iAlt  ))**2.0 + &
+         Mesh_IS1(iAlt,2)*&
+         ((LocalVar(iAlt+1) - LocalVar(iAlt  ))*(LocalVar(iAlt-1) - LocalVar(iAlt))) + &
+         Mesh_IS1(iAlt,3)*&
+         ((LocalVar(iAlt+1) - LocalVar(iAlt  ))**2.0)
+
+   IS2 = Mesh_IS2(iAlt,1)*&
+         (LocalVar(iAlt-2) - LocalVar(iAlt-1))**2.0 + &
+         Mesh_IS2(iAlt,2)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt-1))*(LocalVar(iAlt-2) - LocalVar(iAlt-1))) + &
+         Mesh_IS2(iAlt,3)*&
+         ((LocalVar(iAlt  ) - LocalVar(iAlt-1))**2.0)
+
+   Tau5Z = abs(IS0 - IS2)
+
+   Alpha_M0 = CR_M120*(1.0 + (Tau5Z/(IS0  + WENOEpsilon))**2.0)
+   Alpha_M1 = CR_M121*(1.0 + (Tau5Z/(IS1  + WENOEpsilon))**2.0)
+   Alpha_M2 = CR_M122*(1.0 + (Tau5Z/(IS2  + WENOEpsilon))**2.0)
+
+   DenominatorR = Alpha_M0 + Alpha_M1 + Alpha_M2
+
+   W_M0 = Alpha_M0/DenominatorR
+   W_M1 = Alpha_M1/DenominatorR
+   W_M2 = Alpha_M2/DenominatorR
+
+   ! This isi LocalVarRight_P12(nAlts)
+   LocalVarRight(iAlt-1) = W_M0*UR_M120 + W_M1*UR_M121 + W_M2*UR_M122
+
+   do iAlt = 0, nAlts
+       VarLeft(iAlt) = LocalVarLeft(iAlt)
+      VarRight(iAlt) = LocalVarRight(iAlt)
+   enddo 
+
+ end subroutine !calc_weno_facevalues(Var, VarLeft, VarRight)
 
 
