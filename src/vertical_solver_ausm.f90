@@ -548,7 +548,6 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
        AUSMTotalEnergyFluxes(1:nAlts), &
        NewPress(-1:nAlts+2), NewRho(-1:nAlts+2)
 
-  logical :: SubtractHydrostatic(-1:nAlts+2,1:nSpecies)   
   real :: RadialDistance_C(-1:nAlts+2)
   real :: EffectiveGravity(-1:nAlts+2)
   real :: EffectiveGravity_Energy(-1:nAlts+2)
@@ -756,25 +755,13 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
            RhoS(-1:nAlts+2, 1:nSpecies) - &
       HydroRhoS(-1:nAlts+2,1:nSpecies)
 
-  SubtractHydrostatic = .true.
-!
-!  do iAlt = -1, nAlts + 2
-!    do iSpecies = 1, nSpecies
-!      if ( abs(DeviationRhoSRatio(iAlt,iSpecies)) .gt. 1.0) then
-!          SubtractHydrostatic(iAlt,iSpecies) = .false.
-!      else
-!          SubtractHydrostatic(iAlt,iSpecies) = .true.
-!      endif 
-!    enddo 
-!  enddo 
-
   NewRho = Rho
   NewPress = Press
   NewTotalEnergy = TotalEnergy
   ! Call the AUSM Solvers
   call calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRhoS, &
         HydroPressure,  HydroRho, AUSMRhoSFluxes,AUSMMomentumSFluxes, &
-        AUSMTotalEnergyFluxes, AUSMMomentumFluxes, SubtractHydrostatic)
+        AUSMTotalEnergyFluxes, AUSMMomentumFluxes)
 
   AmpSP = (1.0/(10.0*DtIn))
   kSP = nAltsSponge + 1
@@ -838,15 +825,9 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
   do iAlt = 1,nAlts
      do iSpecies=1,nSpecies
 
-        if (.not. SubtractHydrostatic(iAlt,iSpecies)) then
-           NewMomentumS(iAlt,iSpecies) = MomentumS(iAlt,iSpecies) - &
-                 DtIn*(AUSMMomentumSFluxes(iAlt,iSpecies)) + &
-                 DtIn*RhoS(iAlt,iSpecies)*EffectiveGravity(iAlt) 
-        else
-           NewMomentumS(iAlt,iSpecies) = MomentumS(iAlt,iSpecies) - &
-                 DtIn*(AUSMMomentumSFluxes(iAlt,iSpecies)) + &
-                 DtIn*DeviationRhoS(iAlt,iSpecies)*EffectiveGravity(iAlt) 
-        endif 
+        NewMomentumS(iAlt,iSpecies) = MomentumS(iAlt,iSpecies) - &
+              DtIn*(AUSMMomentumSFluxes(iAlt,iSpecies)) + &
+              DtIn*DeviationRhoS(iAlt,iSpecies)*EffectiveGravity(iAlt) 
 
 !        NewMomentumS(iAlt,iSpecies) = NewMomentumS(iAlt,iSpecies) + &
 !              DtIn*ChemSources_1d(iAlt,iSpecies)*&
@@ -854,21 +835,18 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
 !------------------
         NewVertVel(iAlt,iSpecies) = &
            NewMomentumS(iAlt,iSpecies)/NewRhoS(iAlt,iSpecies) 
-        ! Add Explicit Spherical Curvature Terms here
-        !------
-        if(SubtractHydrostatic(iAlt, iSpecies) )then
-           ! Correction for making the background atmosphere use the full
-           ! diffusive equilibrium formulation
-           MeanGravity = 0.5*(EffectiveGravity(iAlt-1) + &
-                              EffectiveGravity(iAlt  ) )
-           MeanMass = 0.5*(MeanMajorMass_1d(iAlt-1) + &
-                           MeanMajorMass_1d(iAlt  ) )
+        ! Correction for making the background atmosphere use the full
+        ! diffusive equilibrium formulation
+        MeanGravity = 0.5*(EffectiveGravity(iAlt-1) + &
+                           EffectiveGravity(iAlt  ) )
+        MeanMass = 0.5*(MeanMajorMass_1d(iAlt-1) + &
+                        MeanMajorMass_1d(iAlt  ) )
       
-           NewVertVel(iAlt,iSpecies) = NewVertVel(iAlt,iSpecies) + &
+        NewVertVel(iAlt,iSpecies) = NewVertVel(iAlt,iSpecies) + &
              DtIn*(HydroRhoS(iAlt,iSpecies)/RhoS(iAlt,iSpecies))*MeanGravity *&
              (LambdaS(iAlt,iSpecies)/(1.0 + LambdaS(iAlt,iSpecies)))*&
                ( 1.0 - MeanMass/Mass(iSpecies)) 
-        endif
+
         ! Thermal Diffusion Effects (For Light Species H2, H, and He) 
         ! ThermalDiffCoefS is set in calc_rates
         ! Note:  ThermalDiffCoefS is < 0.0 for light species
@@ -1073,7 +1051,7 @@ end subroutine calc_facevalues_alts_ausm
 
 subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRhoS, &
             HydroPressure, HydroRho, DivRhoSFlux, DivMomentumSFlux, &
-            DivEnergyFlux, DivMomentumFlux, SubtractHydrostatic)
+            DivEnergyFlux, DivMomentumFlux)
 
   use ModSizeGitm
   use ModVertical, only : dAlt_C, cMax, VertVel, Gamma_1D, &
@@ -1101,7 +1079,6 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   real, intent(out):: DivMomentumSFlux(1:nAlts,1:nSpecies)
   real, intent(out)::    DivEnergyFlux(1:nAlts)
   real, intent(out)::  DivMomentumFlux(1:nAlts,1:3)
-  logical, intent(in) :: SubtractHydrostatic(-1:nAlts+2,1:nSpecies)
 
   real, dimension(-1:nAlts+2, 1:nSpecies) :: LogRhoS
   real, dimension(-1:nAlts+2, 1:nSpecies) :: LogPS
@@ -1126,7 +1103,7 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   real, dimension( 1:nAlts) :: AreaFunction_P12, AreaFunction_M12    
   real, dimension( 1:nAlts) :: LocalCellVolume
 
-  real:: MInf, LiouBeta
+  real:: MInf, LiouBeta, LiouAlpha
   ! New Streamlined Variables
   real, dimension(0:nAlts,1:nSpecies) ::         RhoSLeft,         RhoSRight
   real, dimension(0:nAlts,1:nSpecies) ::      LogRhoSLeft,      LogRhoSRight
@@ -1190,9 +1167,36 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   real :: ZVar, VL, VR, CBar, ML, MR
   real :: MachScaling
 
+  real, dimension(0:nAlts,1:nSpecies) :: PsiP_Left, PsiN_Right
+  ! Chen [2022], g(M) function
+  real, dimension(0:nAlts,1:nSpecies) :: gMfuncS
+  real, dimension(0:nAlts,1:nSpecies) :: kL, kR
+  integer :: jAlt
+  real :: DeltaPU, DeltaPU_P1, DeltaPU_M1
+  real :: DeltaMU, DeltaMU_P1, DeltaMU_M1
+
+  real :: NonHydrostaticPressureSLeft, NonHydrostaticPressureSRight
+
+!  ! BEGIN SETTING UP VARIABLES
+  ! Basic Geometry of the Grid
+  !   |------------------|--------- X ---------|------------------|
+  !   |-----(i-1)--------|--------- i ---------|------(i+1)-------|
+  !                   (i-1/2)               (i+1/2)
+  !                    L | R                 L | R
+  !            UL_M12(i) | UR_M12(i)  UL_P12(i) | UR_P12(i)
+  !                     i ranges from 1 -> nAlts
+  !
+  ! Current Variable Setup focuses only on the +1/2 Values from 0 to nAlts
+  !         |           UL(i-1)| UR(i-1)       UL(i)| UR(i)
+  !                           i ranges from 0 -> nAlts
+  ! U(i)  |---0---|---- 1 ------|  ...(i-1) -- | -- (i) -- | ... (nAlts) -- | -- (nAlts+1) 
+  ! UI(i) |--   UI(0) -----   UI(1) ...      UI(i-1)         ...        UI(nAlts) 
+  ! L/R   | [UL(0)|UR(0)] [UL(1)|UR(1)] [UL(i-1)|UR(i-1)]    ...  [UL(nAlts)|UR(nAlts)]
+
 
   MInf = 1.0e-19
-  LiouBeta = 1.0/8.0
+  LiouBeta  = 1.0/8.0
+  LiouAlpha = 3.0/16.0 ! just set FA = 1.0
 
        LogRhoS(-1:nAlts+2,1:nSpecies) =      alog(RhoS(-1:nAlts+2,1:nSpecies))
   LogHydroRhoS(-1:nAlts+2,1:nSpecies) = alog(HydroRhoS(-1:nAlts+2,1:nSpecies))
@@ -1457,16 +1461,34 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
       if ( abs(MachSLeft(iAlt,iSpecies)) .ge. 1.0) then 
          MachSFn4PLeft(iAlt,iSpecies) = MachSFn1PLeft(iAlt,iSpecies)
+
+         ! These are the Slau2 versions (alpha = 0.0)
+         PsiP_Left(iAlt,iSpecies) = &
+            0.5*(1.0 + abs(MachSLeft(iAlt,iSpecies))/MachSLeft(iAlt,iSpecies) )
       else
          MachSFn4PLeft(iAlt,iSpecies) = MachSFn2PLeft(iAlt,iSpecies)*&
                    (1.0 - 16.0*LiouBeta*MachSFn2NLeft(iAlt,iSpecies))
+
+         ! These are the Slau2 versions (alpha = 0.0)
+         PsiP_Left(iAlt,iSpecies) = &
+            0.25*( (MachSLeft(iAlt,iSpecies) + 1.0)**2.0)*(2.0 - MachSLeft(iAlt,iSpecies)) + &
+                  LiouAlpha*MachSLeft(iAlt,iSpecies)*(MachSLeft(iAlt,iSpecies)**2.0 - 1.0)**2.0 
       endif 
 !
       if ( abs(MachSRight(iAlt,iSpecies)) .ge. 1.0) then 
          MachSFn4NRight(iAlt,iSpecies) = MachSFn1NRight(iAlt,iSpecies)
+         ! These are the Slau2 versions (alpha = 0.0)
+         PsiN_Right(iAlt,iSpecies) = &
+            0.5*(1.0 + abs(MachSRight(iAlt,iSpecies))/MachSRight(iAlt,iSpecies))
       else
          MachSFn4NRight(iAlt,iSpecies) = MachSFn2NRight(iAlt,iSpecies)*&
                    (1.0 + 16.0*LiouBeta*MachSFn2PRight(iAlt,iSpecies))
+         ! These are the Slau2 versions (alpha = 0.0)
+         !PsiN_Right(iAlt,iSpecies) = &
+         !   0.25*( (MachSRight(iAlt,iSpecies) - 1.0)**2.0)*(2.0 + MachSRight(iAlt,iSpecies)) 
+         PsiN_Right(iAlt,iSpecies) = &
+            0.25*( (MachSRight(iAlt,iSpecies) - 1.0)**2.0)*(2.0 + MachSRight(iAlt,iSpecies)) - &
+                  LiouAlpha*MachSRight(iAlt,iSpecies)*(MachSRight(iAlt,iSpecies)**2.0 - 1.0)**2.0 
       endif 
     enddo 
   enddo 
@@ -1508,13 +1530,51 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
   do iAlt = 0, nAlts
      do iSpecies = 1, nSpecies
-        NumericalPressureS(iAlt,iSpecies) = &
-             (MeanPressureS(iAlt,iSpecies) - &
-              MeanHydroPressureS(iAlt,iSpecies) )&
-           - 0.5*KuSParam(iAlt,iSpecies)*InterfaceSoundSpeedS(iAlt,iSpecies)*&
-              ( RhoSRight(iAlt,iSpecies)*VertVelSRight(iAlt,iSpecies) - &
-                 RhoSLeft(iAlt,iSpecies)* VertVelSLeft(iAlt,iSpecies) )
+! AUSM+-up Version
+!        NumericalPressureS(iAlt,iSpecies) = &
+!             (MeanPressureS(iAlt,iSpecies) - &
+!              MeanHydroPressureS(iAlt,iSpecies) )&
+!           + 0.5*(PsiP_Left(iAlt,iSpecies) - PsiN_Right(iAlt,iSpecies))*&
+!             ( ( PressureSLeft(iAlt,iSpecies) -  HydroPressureSLeft(iAlt,iSpecies)) - &
+!               (PressureSRight(iAlt,iSpecies) - HydroPressureSRight(iAlt,iSpecies))) + &
+!             KuSParam(iAlt,iSpecies)*&
+!              (PsiP_Left(iAlt,iSpecies) + PsiN_Right(iAlt,iSpecies) - 1.0)*&
+!             (MeanPressureS(iAlt,iSpecies) - MeanHydroPressureS(iAlt,iSpecies))
 
+         NonHydrostaticPressureSLeft  =  PressureSLeft(iAlt,iSpecies) -  HydroPressureSLeft(iAlt,iSpecies)
+        NonHydrostaticPressureSRight  = PressureSRight(iAlt,iSpecies) - HydroPressureSRight(iAlt,iSpecies)
+
+        NumericalPressureS(iAlt,iSpecies) = &
+             PsiP_Left(iAlt,iSpecies)*NonHydrostaticPressureSLeft +  &
+            PsiN_Right(iAlt,iSpecies)*NonHydrostaticPressureSRight - &
+            KuSParam(iAlt,iSpecies)*PsiP_Left(iAlt,iSpecies)*PsiN_Right(iAlt,iSpecies)*&
+            (RhoSLeft(iAlt,iSpecies) + RhoSRight(iAlt,iSpecies))*&
+             InterfaceSoundSpeedS(iAlt,iSpecies)*&
+            (VertVelSLeft(iAlt,iSpecies) - VertVelSRight(iAlt,iSpecies))
+
+!        NumericalPressureS(iAlt,iSpecies) = &
+!             (PressureS(iAlt,iSpecies) - &
+!              MeanHydroPressureS(iAlt,iSpecies) )&
+!           + 0.5*(PsiP_Left(iAlt,iSpecies) - PsiN_Right(iAlt,iSpecies))*&
+!             ( ( PressureSLeft(iAlt,iSpecies) -  HydroPressureSLeft(iAlt,iSpecies)) - &
+!               (PressureSRight(iAlt,iSpecies) - HydroPressureSRight(iAlt,iSpecies))) + &
+!             KuSParam(iAlt,iSpecies)*&
+!              (PsiP_Left(iAlt,iSpecies) + PsiN_Right(iAlt,iSpecies) - 1.0)*&
+!             (MeanPressureS(iAlt,iSpecies) - MeanHydroPressureS(iAlt,iSpecies))
+
+
+
+! SLAU Version
+!        NumericalPressureS(iAlt,iSpecies) = &
+!             (MeanPressureS(iAlt,iSpecies) - &
+!              MeanHydroPressureS(iAlt,iSpecies) )&
+!           + 0.5*(PsiP_Left(iAlt,iSpecies) - PsiN_Right(iAlt,iSpecies))*&
+!             ( ( PressureSLeft(iAlt,iSpecies) -  HydroPressureSLeft(iAlt,iSpecies)) - &
+!               (PressureSRight(iAlt,iSpecies) - HydroPressureSRight(iAlt,iSpecies))) + &
+!              KuSParam(iAlt,iSpecies)*&
+!              (PsiP_Left(iAlt,iSpecies) + PsiN_Right(iAlt,iSpecies) - 1.0)*&
+!             (MeanPressureS(iAlt,iSpecies) - MeanHydroPressureS(iAlt,iSpecies))
+!
      enddo !iSpecies = 1, nSpecies
   enddo !iAlt = 1, nAlts
 
@@ -1592,6 +1652,7 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
      AreaFunction_M12(iAlt) = Area_M12(iAlt)
      LocalCellVolume(iAlt) = CellVol1D(iAlt)
   enddo 
+
 
   ! Divergence of Fluxes
   do iAlt = 1, nAlts
