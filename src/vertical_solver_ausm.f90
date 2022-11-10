@@ -560,9 +560,9 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
 
   !--------------------------------------------------------------------------
   !--------------------------------------------------------------------------
-  Vel0 = 100.0 ! initial velocity in m/s
-  TimeFactor = exp(-tSimulation/43200.0)
-  DeltaV = MaximumVerticalVelocity - Vel0
+  Vel0 = 1.0 ! initial velocity in m/s
+  TimeFactor = exp(-tSimulation/1800.0)
+  DeltaV = (MaximumVerticalVelocity - Vel0)*(1.0 - TimeFactor)
   VelocityCap = Vel0 + DeltaV*(1.0 - TimeFactor)
 
   do iAlt = -1, nAlts + 2
@@ -944,9 +944,9 @@ subroutine advance_vertical_1stage_ausm( DtIn, &
  
      NewTemp(iAlt) = NewPress(iAlt)/(Boltzmanns_Constant*NewNT(iAlt))
 
-!     NewTemp(iAlt) = NewTemp(iAlt) + &
-!       0.25*exp(-1.0*(Altitude_G(iAlt) - Altitude_G(0))/&
-!       (45.0e+03)) * DtIn*DiffTemp(iAlt)
+     NewTemp(iAlt) = NewTemp(iAlt) + &
+       0.25*exp(-1.0*(Altitude_G(iAlt) - Altitude_G(0))/&
+       (10.0e+03)) * DtIn*DiffTemp(iAlt)
 
   enddo ! iAlt
 
@@ -1104,6 +1104,8 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   real, dimension( 1:nAlts) :: LocalCellVolume
 
   real:: MInf, LiouBeta, LiouAlpha
+
+
   ! New Streamlined Variables
   real, dimension(0:nAlts,1:nSpecies) ::         RhoSLeft,         RhoSRight
   real, dimension(0:nAlts,1:nSpecies) ::      LogRhoSLeft,      LogRhoSRight
@@ -1177,7 +1179,95 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
   real :: NonHydrostaticPressureSLeft, NonHydrostaticPressureSRight
 
-!  ! BEGIN SETTING UP VARIABLES
+  ! New Streamlined Variables
+  real, dimension(0:nAlts,1:nSpecies) ::         RhoSLeftWENO,         RhoSRightWENO
+  real, dimension(0:nAlts,1:nSpecies) ::      LogRhoSLeftWENO,      LogRhoSRightWENO
+  real, dimension(0:nAlts,1:nSpecies) ::    HydroRhoSLeftWENO,    HydroRhoSRightWENO
+  real, dimension(0:nAlts,1:nSpecies) :: LogHydroRhoSLeftWENO, LogHydroRhoSRightWENO
+
+  ! New Pressure Variables
+  real, dimension(0:nAlts,1:nSpecies) :: PressureSLeftWENO, PressureSRightWENO
+  real, dimension(0:nAlts,1:nSpecies) :: HydroPressureSLeftWENO, HydroPressureSRightWENO
+  ! New Species Winds 
+  real, dimension(0:nAlts,1:nSpecies) ::     VertVelSLeftWENO,     VertVelSRightWENO
+  ! Bulk Fields
+  real, dimension(0:nAlts)            :: RhoLeftWENO, RhoRightWENO
+  real, dimension(0:nAlts)            :: TemperatureLeftWENO, TemperatureRightWENO
+  real, dimension(0:nAlts)            :: PressureLeftWENO, PressureRightWENO
+  real, dimension(0:nAlts,1:3)        :: VelGDLeftWENO, VelGDRightWENO
+  real, dimension(0:nAlts)            :: GammaLeftWENO, GammaRightWENO
+  ! Derived Fields
+  real, dimension(0:nAlts)            :: EnergyLeftWENO, EnergyRightWENO
+  real, dimension(0:nAlts)            :: EnthalpyLeftWENO, EnthalpyRightWENO
+  real, dimension(0:nAlts,1:nSpecies) :: EnthalpySLeftWENO, EnthalpySRightWENO
+
+  ! Sound Speed Fields
+  real, dimension(0:nAlts)            :: SoundSpeedLeftWENO, SoundSpeedRightWENO
+  real, dimension(0:nAlts,1:nSpecies) :: SoundSpeedSLeftWENO, SoundSpeedSRightWENO
+
+  ! Mach Numbers 
+  real, dimension(0:nAlts,1:nSpecies) :: MachSLeftWENO, MachSRightWENO
+  real, dimension(0:nAlts,1:nSpecies) :: MachSZero2WENO, MachSZeroWENO
+  ! AUSM+-up Parameters
+  
+  ! Mach Functions 
+  ! M(1)
+  real, dimension(0:nAlts,1:nSpecies) ::  MachSFn1PLeftWENO,  MachSFn1NLeftWENO
+  real, dimension(0:nAlts,1:nSpecies) :: MachSFn1PRightWENO, MachSFn1NRightWENO
+  ! M(2)
+  real, dimension(0:nAlts,1:nSpecies) ::  MachSFn2PLeftWENO,  MachSFn2NLeftWENO
+  real, dimension(0:nAlts,1:nSpecies) :: MachSFn2PRightWENO, MachSFn2NRightWENO
+  ! M(4)
+  real, dimension(0:nAlts,1:nSpecies) ::  MachSFn4PLeftWENO,  MachSFn4NLeftWENO
+  real, dimension(0:nAlts,1:nSpecies) :: MachSFn4PRightWENO, MachSFn4NRightWENO
+
+
+  real, dimension(0:nAlts,1:nSpecies) :: PsiP_LeftWENO, PsiN_RightWENO
+  real :: NonHydrostaticPressureSLeftWENO, NonHydrostaticPressureSRightWENO
+
+  ! Numerical Velocity and Pressure
+  real, dimension(0:nAlts,1:nSpecies) ::  NumericalVertVelSWENO
+  real, dimension(0:nAlts,1:nSpecies) ::  NumericalPressureSWENO
+  real, dimension(0:nAlts           ) ::  BulkNumericalVertVelWENO
+  real, dimension(0:nAlts,1:nSpecies) ::  AUSMMachPressureParamSWENO
+  real, dimension(0:nAlts,1:nSpecies) :: InterfaceSoundSpeedSWENO
+  real, dimension(0:nAlts)            :: InterfaceSoundSpeedWENO
+  real, dimension(0:nAlts,1:nSpecies) ::     MeanRhoSWENO
+  real, dimension(0:nAlts,1:nSpecies) :: MeanPressureSWENO
+  real, dimension(0:nAlts,1:nSpecies) :: MeanHydroPressureSWENO
+  real, dimension(0:nAlts,1:nSpecies) :: MachSBar2WENO
+  real, dimension(0:nAlts,1:nSpecies) :: KpSParamWENO, KuSParamWENO
+  ! Interface Flux
+  real, dimension(0:nAlts,1:nSpecies) ::  RhoSFluxWENO
+  real, dimension(0:nAlts,1:nSpecies) ::  MomentumSFluxWENO
+  real, dimension(0:nAlts,1:3       ) ::  MomentumFluxWENO
+  real, dimension(0:nAlts           ) ::  EnergyFluxWENO
+  ! Thornber Correction
+  real :: ZVarWENO, VLWENO, VRWENO, CBarWENO, MLWENO, MRWENO
+  real :: MachScalingWENO
+  ! Chen [2022], g(M) function
+  real, dimension(0:nAlts,1:nSpecies) :: gMfuncSWENO
+  real, dimension(0:nAlts,1:nSpecies) :: kLWENO, kRWENO
+
+  real, dimension(0:nAlts,1:nSpecies) ::  LogNumericalPressureS
+  real, dimension(0:nAlts,1:nSpecies) ::  LogNumericalHydroPressureS
+  real, dimension(0:nAlts,1:nSpecies) ::     NumericalHydroPressureS
+  real, dimension(1:nAlts,1:nSpecies) ::  CellCenteredLogNumericalPressureS
+  real, dimension(1:nAlts,1:nSpecies) ::  CellCenteredLogNumericalHydroPressureS
+  real, dimension(1:nAlts,1:nSpecies) ::  CellCenteredNumericalPressureS
+  real, dimension(1:nAlts,1:nSpecies) ::  CellCenteredNumericalHydroPressureS
+
+  real, dimension(0:nAlts,1:nSpecies) ::  LogNumericalPressureSWENO
+  real, dimension(0:nAlts,1:nSpecies) ::  LogNumericalHydroPressureSWENO
+  real, dimension(0:nAlts,1:nSpecies) ::     NumericalHydroPressureSWENO
+  real, dimension(1:nAlts,1:nSpecies) ::  CellCenteredLogNumericalPressureSWENO
+  real, dimension(1:nAlts,1:nSpecies) ::  CellCenteredLogNumericalHydroPressureSWENO
+  real, dimension(1:nAlts,1:nSpecies) ::  CellCenteredNumericalPressureSWENO
+  real, dimension(1:nAlts,1:nSpecies) ::  CellCenteredNumericalHydroPressureSWENO
+
+
+
+  ! BEGIN SETTING UP VARIABLES
   ! Basic Geometry of the Grid
   !   |------------------|--------- X ---------|------------------|
   !   |-----(i-1)--------|--------- i ---------|------(i+1)-------|
@@ -1200,15 +1290,454 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
        LogRhoS(-1:nAlts+2,1:nSpecies) =      alog(RhoS(-1:nAlts+2,1:nSpecies))
   LogHydroRhoS(-1:nAlts+2,1:nSpecies) = alog(HydroRhoS(-1:nAlts+2,1:nSpecies))
+  ! BEGINWENO
+  ! Establish Cell Interface values 
+  ! Get the RhoS facevaluess and Bulk Rho facevalues
+   RhoLeftWENO(0:nAlts) = 0.0
+  RhoRightWENO(0:nAlts) = 0.0
+  do iSpecies = 1, nSpecies
+     call calc_weno_facevalues(LogRhoS(-1:nAlts+2,iSpecies), &
+                      LogRhoSLeftWENO( 0:nAlts  ,iSpecies), &
+                     LogRhoSRightWENO( 0:nAlts  ,iSpecies) )
+      RhoSLeftWENO(:,iSpecies) = exp( LogRhoSLeftWENO(:,iSpecies))
+     RhoSRightWENO(:,iSpecies) = exp(LogRhoSRightWENO(:,iSpecies))
+     ! Bulk Rho
+      RhoLeftWENO(:) =  RhoLeftWENO(:) +    RhoSLeftWENO(:,iSpecies)
+     RhoRightWENO(:) = RhoRightWENO(:) +   RhoSRightWENO(:,iSpecies)
+  enddo 
+  ! End RhoS, Rho Facevalues
 
+  ! Begin HydroRhoS, HydroRho Facevalues:
+  ! Note: Hydro denotes hydrostatic background
+  do iSpecies = 1, nSpecies
+     call calc_weno_facevalues(LogHydroRhoS(-1:nAlts+2,iSpecies), &
+                      LogHydroRhoSLeftWENO( 0:nAlts  ,iSpecies), &
+                     LogHydroRhoSRightWENO( 0:nAlts  ,iSpecies) )
+      HydroRhoSLeftWENO(:,iSpecies) = exp( LogHydroRhoSLeftWENO(:,iSpecies))
+     HydroRhoSRightWENO(:,iSpecies) = exp(LogHydroRhoSRightWENO(:,iSpecies))
+  enddo 
+
+  ! Calculate the LeftWENO and RightWENO Faces of the Temperatures 
+  call calc_weno_facevalues(Temp(-1:nAlts+2), &
+                TemperatureLeftWENO( 0:nAlts  ), &
+               TemperatureRightWENO( 0:nAlts  ) )
+
+  PressureRightWENO = 0.0
+   PressureLeftWENO = 0.0
+  do iSpecies = 1, nSpecies
+     PressureSLeftWENO(0:nAlts,iSpecies) = &
+         (RhoSLeftWENO(0:nAlts,iSpecies)/Mass(iSpecies))*&
+         Boltzmanns_Constant*TemperatureLeftWENO(0:nAlts)
+     PressureLeftWENO = PressureLeftWENO + PressureSLeftWENO(:,iSpecies)
+
+     HydroPressureSLeftWENO(0:nAlts,iSpecies) = &
+         (HydroRhoSLeftWENO(0:nAlts,iSpecies)/Mass(iSpecies))*&
+        Boltzmanns_Constant*TemperatureLeftWENO(0:nAlts)
+
+     PressureSRightWENO(0:nAlts,iSpecies) = &
+        (RhoSRightWENO(0:nAlts,iSpecies)/Mass(iSpecies))*&
+         Boltzmanns_Constant*TemperatureRightWENO(0:nAlts)
+     PressureRightWENO = PressureRightWENO + PressureSRightWENO(:,iSpecies)
+
+    HydroPressureSRightWENO(0:nAlts,iSpecies) = &
+        (HydroRhoSRightWENO(0:nAlts,iSpecies)/Mass(iSpecies))*&
+         Boltzmanns_Constant*TemperatureRightWENO(0:nAlts)
+  enddo 
+
+  ! Begin Vertical, Horizontal Species and Bulk Winds
+  do iSpecies = 1, nSpecies
+    call calc_weno_facevalues(VertVel(:,iSpecies), &
+                        VertVelSLeftWENO(:,iSpecies), &
+                       VertVelSRightWENO(:,iSpecies))
+  enddo 
+
+  do iDim = 1, 3
+     call calc_weno_facevalues(Vel_GD(:,iDim), &
+                           VelGDLeftWENO(:,iDim), &
+                          VelGDRightWENO(:,iDim))
+  enddo 
+
+   VelGDLeftWENO(:,iUp_) = 0.0
+  VelGDRightWENO(:,iUp_) = 0.0
+  do iSpecies = 1, nSpecies
+      VelGDLeftWENO(:,iUp_) = VelGDLeftWENO(:,iUp_) + &
+           RhoSLeftWENO(:,iSpecies)*VertVelSLeftWENO(:,iSpecies)/&
+            RhoLeftWENO(:)
+
+      VelGDRightWENO(:,iUp_) = VelGDRightWENO(:,iUp_) + &
+           RhoSRightWENO(:,iSpecies)*VertVelSRightWENO(:,iSpecies)/&
+            RhoRightWENO(:)
+  enddo !iSpecies = 1, nSpecies
+
+  call calc_weno_facevalues(Gamma_1d(:), GammaLeftWENO(:), GammaRightWENO(:))
+
+  do iAlt = 0, nAlts
+     EnergyLeftWENO(iAlt) = &
+         ( 1.0/(GammaLeftWENO(iAlt) - 1.0))*PressureLeftWENO(iAlt) + &
+           0.5*RhoLeftWENO(iAlt)*&
+          (VelGDLeftWENO(iAlt,iUp_)**2.0 + VelGDLeftWENO(iAlt,iEast_)**2.0 + &
+           VelGDLeftWENO(iAlt,iNorth_)**2.0)
+
+     EnergyRightWENO(iAlt) = &
+         ( 1.0/(GammaRightWENO(iAlt) - 1.0))*PressureRightWENO(iAlt) + &
+           0.5*RhoRightWENO(iAlt)*&
+          (VelGDRightWENO(iAlt,iUp_)**2.0 + VelGDRightWENO(iAlt,iEast_)**2.0 + &
+           VelGDRightWENO(iAlt,iNorth_)**2.0)
+  enddo 
+
+  do iAlt = 0, nAlts 
+     EnthalpyLeftWENO(iAlt) = &
+       0.5*(VelGDLeftWENO(iAlt,iUp_)**2.0 + &
+            VelGDLeftWENO(iAlt,iEast_)**2.0 + &
+            VelGDLeftWENO(iAlt,iNorth_)**2.0) + &
+          (GammaLeftWENO(iAlt)/(GammaLeftWENO(iAlt) - 1.0))*&
+          PressureLeftWENO(iAlt)/RhoLeftWENO(iAlt)
+
+     EnthalpyRightWENO(iAlt) = &
+       0.5*(VelGDRightWENO(iAlt,iUp_)**2.0 + &
+            VelGDRightWENO(iAlt,iEast_)**2.0 + &
+            VelGDRightWENO(iAlt,iNorth_)**2.0) + &
+          (GammaRightWENO(iAlt)/(GammaRightWENO(iAlt) - 1.0))*&
+          PressureRightWENO(iAlt)/RhoRightWENO(iAlt)
+
+     do iSpecies = 1, nSpecies
+
+        EnthalpySLeftWENO(iAlt,iSpecies) = &
+          0.5*(VertVelSLeftWENO(iAlt,iSpecies)**2.0 + &
+               VelGDLeftWENO(iAlt,iEast_)**2.0 + &
+               VelGDLeftWENO(iAlt,iNorth_)**2.0) + &
+             (GammaLeftWENO(iAlt)/(GammaLeftWENO(iAlt) - 1.0))*&
+             PressureSLeftWENO(iAlt,iSpecies)/RhoSLeftWENO(iAlt,iSpecies)
+
+        EnthalpySRightWENO(iAlt,iSpecies) = &
+          0.5*(VertVelSRightWENO(iAlt,iSpecies)**2.0 + &
+               VelGDRightWENO(iAlt,iEast_)**2.0 + &
+               VelGDRightWENO(iAlt,iNorth_)**2.0) + &
+             (GammaRightWENO(iAlt)/(GammaRightWENO(iAlt) - 1.0))*&
+             PressureSRightWENO(iAlt,iSpecies)/RhoSRightWENO(iAlt,iSpecies)
+
+     enddo !iSpecies = 1, nSpecies
+  enddo 
+
+  do iAlt = 0, nAlts
+     SubCs = &
+        sqrt(2.0*( (GammaLeftWENO(iAlt) - 1.0 )/(GammaLeftWENO(iAlt) + 1.0)) *&
+                 EnthalpyLeftWENO(iAlt) )
+     SoundSpeedLeftWENO(iAlt) = (SubCs**2.0)/max(SubCs, VelGDLeftWENO(iAlt,iUp_))
+
+     ! Note the -1.0 factor in the RightWENO face
+     SubCs = &
+        sqrt(2.0*( (GammaRightWENO(iAlt) - 1.0 )/(GammaRightWENO(iAlt) + 1.0)) *&
+                 EnthalpyRightWENO(iAlt) )
+     SoundSpeedRightWENO(iAlt) = (SubCs**2.0)/max(SubCs, -1.0*VelGDRightWENO(iAlt,iUp_))
+
+     InterfaceSoundSpeedWENO(iAlt) = min(SoundSpeedLeftWENO(iAlt), SoundSpeedRightWENO(iAlt))
+
+     do iSpecies = 1, nSpecies
+        SubCs = &
+           sqrt(2.0*( (GammaLeftWENO(iAlt) - 1.0 )/(GammaLeftWENO(iAlt) + 1.0)) *&
+                    EnthalpySLeftWENO(iAlt,iSpecies) )
+        SoundSpeedSLeftWENO(iAlt,iSpecies) = &
+           (SubCs**2.0)/max(SubCs, VertVelSLeftWENO(iAlt,iSpecies))
+
+        SubCs = &
+           sqrt(2.0*( (GammaRightWENO(iAlt) - 1.0 )/(GammaRightWENO(iAlt) + 1.0)) *&
+                    EnthalpySRightWENO(iAlt,iSpecies) )
+        ! Note the -1.0 factor in the RightWENO face
+        SoundSpeedSRightWENO(iAlt,iSpecies) = &
+           (SubCs**2.0)/max(SubCs, -1.0*VertVelSRightWENO(iAlt,iSpecies))
+        InterfaceSoundSpeedSWENO(iAlt,iSpecies) = &
+           min(SoundSpeedSLeftWENO(iAlt,iSpecies), SoundSpeedSRightWENO(iAlt,iSpecies))
+     enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 0, nAlts
+
+  do iSpecies = 1, nSpecies
+     do iAlt = 0, nAlts
+        ! Implement Thornber Entropy Correction at low Mach Numbers
+        ! see. Thornber et al. [2008], J. Comp. Phys, 227, 4873-4894
+        ! Implementation here taken from Houim et al. [2011], J Comp.Phys, 230, 8527-8553
+        CBarWENO = InterfaceSoundSpeedSWENO(iAlt,iSpecies)
+        VLWENO   =         VertVelSLeftWENO(iAlt,iSpecies)
+        VRWENO   =        VertVelSRightWENO(iAlt,iSpecies)
+        MLWENO   = sqrt(VLWENO*VLWENO)/CBarWENO
+        MRWENO   = sqrt(VRWENO*VRWENO)/CBarWENO
+        ZVarWENO = min(1.0, max(MLWENO,MRWENO))
+         VertVelSLeftWENO(iAlt,iSpecies) = 0.5*(VLWENO + VRWENO) + 0.5*ZVarWENO*(VLWENO - VRWENO)
+        VertVelSRightWENO(iAlt,iSpecies) = 0.5*(VLWENO + VRWENO) + 0.5*ZVarWENO*(VRWENO - VLWENO)
+     enddo !iAlt = 1, nAlts
+  enddo !iSpecies = 1, nSpecies
+
+  MeanPressureSWENO = 0.5*(PressureSLeftWENO + PressureSRightWENO)
+  MeanHydroPressureSWENO = 0.5*(HydroPressureSLeftWENO + HydroPressureSRightWENO)
+  MeanRhoSWENO = 0.5*(RhoSLeftWENO + RhoSRightWENO)
+
+  do iAlt = 0, nAlts 
+    do iSpecies = 1, nSpecies
+       MachSLeftWENO(iAlt,iSpecies) = &
+         VertVelSLeftWENO(iAlt,iSpecies)/InterfaceSoundSpeedSWENO(iAlt,iSpecies)
+       MachSRightWENO(iAlt,iSpecies) = &
+         VertVelSRightWENO(iAlt,iSpecies)/InterfaceSoundSpeedSWENO(iAlt,iSpecies)
+    enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 1, nAlts 
+
+  do iAlt = 0, nAlts
+     do iSpecies = 1, nSpecies
+        MachSBar2WENO(iAlt,iSpecies) = &
+           0.5*( MachSLeftWENO(iAlt,iSpecies)**2.0 + &
+                MachSRightWENO(iAlt,iSpecies)**2.0 )
+        MachSZero2WENO(iAlt,iSpecies) = &
+           min(1.0, max(MachSBar2WENO(iAlt,iSpecies), MInf))
+        MachSZeroWENO(iAlt,iSpecies) = sqrt(MachSZero2WENO(iAlt,iSpecies))
+     enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 1, nAlts
+
+  ! Create Mach-Scaling Pressure-Correction Functions
+  ! Establish Mach Number Scaling Functions g(M)
+  ! We specify a g(M) such that it goes away as |M|->1
+  ! g(M) ~ M^2 as M -> 0.0
+  Kp(1:nSpecies) = 0.10             !! Ullrich et al. [2011]
+  Ku(1:nSpecies) = 10.00             !! Ullrich et al. [2011]
+
+  do iAlt = 0, nAlts
+     do iSpecies = 1, nSpecies
+        ! Note that MZero is scaled to be within [0,1]
+        ! Specify pressure correction fluxes (LiouKpS)
+        ! Note: MZero -> [0,1]
+        ! Note: M2Zero  = (MZero)^2.0-> [0,1]
+        ! As M -> 0.0, MachScaling ~ M^2 - M^4 ~ M^2 -> Varies like a pressure at Low Mach
+        ! As M >> 1.0, MZero = 1.0, MachScaling ~ 1 - 1 -> 0.0
+        !    This shuts our correction down at high mach number
+        ! Mathematically, we want AUSM+-up Numerical Flux(Mp):
+        !        Mp ~ d(P)*/(rho*cs*(fa*cs + zeta*dz/dt)) ~ dP/rho*cs^2
+
+        MachScalingWENO = MachSZeroWENO(iAlt,iSpecies)**2.0
+        KpSParamWENO(iAlt,iSpecies) = MachScalingWENO*Kp(iSpecies)
+
+        ! Note that MZero ranges from [0, 1.0] (cap at 1.0)
+        !MachScalingWENO = 1.0 - MachSZeroWENO(iAlt,iSpecies)
+        !KuSParamWENO(iAlt,iSpecies) = MachScaling*Ku(iSpecies)
+        !MachScalingWENO = MachSZeroWENO(iAlt,iSpecies)*(1.0 - MachSZeroWENO(iAlt,iSpecies))
+        MachScalingWENO = (1.0 - MachSZeroWENO(iAlt,iSpecies))
+        KuSParamWENO(iAlt,iSpecies) = MachScaling*Ku(iSpecies)
+     enddo 
+  enddo 
+
+  ! BEGIN Mach Functions 
+  ! M(1)
+  do iAlt = 0, nAlts
+     do iSpecies = 1, nSpecies
+        MachSFn1PLeftWENO(iAlt,iSpecies) = &
+            0.5*(MachSLeftWENO(iAlt,iSpecies) + abs(MachSLeftWENO(iAlt,iSpecies)) )
+        MachSFn1PRightWENO(iAlt,iSpecies) = &
+            0.5*(MachSRightWENO(iAlt,iSpecies) + abs(MachSRightWENO(iAlt,iSpecies)) )
+
+        MachSFn1NLeftWENO(iAlt,iSpecies) = &
+            0.5*(MachSLeftWENO(iAlt,iSpecies) - abs(MachSLeftWENO(iAlt,iSpecies)) )
+        MachSFn1NRightWENO(iAlt,iSpecies) = &
+            0.5*(MachSRightWENO(iAlt,iSpecies) - abs(MachSRightWENO(iAlt,iSpecies)) )
+
+     enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 1, nAlts
+  ! M(2)
+  do iAlt = 0, nAlts
+     do iSpecies = 1, nSpecies
+         MachSFn2PLeftWENO(iAlt,iSpecies) =  0.25*( MachSLeftWENO(iAlt,iSpecies) + 1.0)**2.0
+        MachSFn2PRightWENO(iAlt,iSpecies) =  0.25*(MachSRightWENO(iAlt,iSpecies) + 1.0)**2.0
+
+         MachSFn2NLeftWENO(iAlt,iSpecies) = -0.25*( MachSLeftWENO(iAlt,iSpecies) - 1.0)**2.0
+        MachSFn2NRightWENO(iAlt,iSpecies) = -0.25*(MachSRightWENO(iAlt,iSpecies) - 1.0)**2.0
+     enddo 
+  enddo 
+  ! M(4)
+  do iAlt = 0, nAlts
+    do iSpecies = 1, nSpecies
+
+      if ( abs(MachSLeftWENO(iAlt,iSpecies)) .ge. 1.0) then 
+         MachSFn4PLeftWENO(iAlt,iSpecies) = MachSFn1PLeftWENO(iAlt,iSpecies)
+
+         ! These are the Slau2 versions (alpha = 0.0)
+         PsiP_LeftWENO(iAlt,iSpecies) = &
+            0.5*(1.0 + abs(MachSLeftWENO(iAlt,iSpecies))/MachSLeftWENO(iAlt,iSpecies) )
+      else
+         MachSFn4PLeftWENO(iAlt,iSpecies) = MachSFn2PLeftWENO(iAlt,iSpecies)*&
+                   (1.0 - 16.0*LiouBeta*MachSFn2NLeftWENO(iAlt,iSpecies))
+
+         ! These are the Slau2 versions (alpha = 0.0)
+         PsiP_LeftWENO(iAlt,iSpecies) = &
+            0.25*( (MachSLeftWENO(iAlt,iSpecies) + 1.0)**2.0)*(2.0 - MachSLeftWENO(iAlt,iSpecies)) + &
+                  LiouAlpha*MachSLeftWENO(iAlt,iSpecies)*(MachSLeftWENO(iAlt,iSpecies)**2.0 - 1.0)**2.0 
+      endif 
+!
+      if ( abs(MachSRightWENO(iAlt,iSpecies)) .ge. 1.0) then 
+         MachSFn4NRightWENO(iAlt,iSpecies) = MachSFn1NRightWENO(iAlt,iSpecies)
+         ! These are the Slau2 versions (alpha = 0.0)
+         PsiN_RightWENO(iAlt,iSpecies) = &
+            0.5*(1.0 + abs(MachSRightWENO(iAlt,iSpecies))/MachSRightWENO(iAlt,iSpecies))
+      else
+         MachSFn4NRightWENO(iAlt,iSpecies) = MachSFn2NRightWENO(iAlt,iSpecies)*&
+                   (1.0 + 16.0*LiouBeta*MachSFn2PRightWENO(iAlt,iSpecies))
+         ! These are the Slau2 versions (alpha = 0.0)
+         !PsiN_RightWENO(iAlt,iSpecies) = &
+         !   0.25*( (MachSRightWENO(iAlt,iSpecies) - 1.0)**2.0)*(2.0 + MachSRightWENO(iAlt,iSpecies)) 
+         PsiN_RightWENO(iAlt,iSpecies) = &
+            0.25*( (MachSRightWENO(iAlt,iSpecies) - 1.0)**2.0)*(2.0 + MachSRightWENO(iAlt,iSpecies)) - &
+                  LiouAlpha*MachSRightWENO(iAlt,iSpecies)*(MachSRightWENO(iAlt,iSpecies)**2.0 - 1.0)**2.0 
+      endif 
+    enddo 
+  enddo 
+
+  !!! Begin 2nd Order Mach Number Polynomials
+  !real, dimension(0:nAlts,1:nSpecies) ::  MachPressureSParamAUSM
+  do iAlt = 0, nAlts 
+   do iSpecies = 1, nSpecies 
+      ! Note that MPress varies as Kp*(g(M))* dPs/(rhos*as^2)
+      ! g(M) is a "shut off" for M > 1
+      ! in all cases rhos*as^2 ~ rhos*(Gamma*Ps/rhos) ~ Gamma*Ps 
+      ! now:  In the vertical direction
+      !
+      ! dPs/Ps ~ (1/Ps)*(dP/dr)*dr ~ -rhos*(grav)/(ns*kb*T)*dr  
+      ! Thus as M -> 0 and P approaches hydrostatic
+      ! Therefore MPress ~ Kp*ms*g*dr/(kb*T) (no units)
+      ! But we want this to vary as M^2 as a pressure flux as M->0
+      ! So we want APC Scalar as f(M) ~ Ms^2
+      ! Mp_APC ~ f(M)*Kp*dPs/(rhos*cs^2) -> Ms^2*Kp*(dr/Hs)
+!!!!! Hydrostatic Species Use This one
+
+      AUSMMachPressureParamSWENO(iAlt,iSpecies) = &
+          KpSParamWENO(iAlt,iSpecies)*max( (1.0 - MachSBar2WENO(iAlt,iSpecies)), 0.0)*&
+         ( (PressureSRightWENO(iAlt, iSpecies) - HydroPressureSRightWENO(iAlt,iSpecies) ) - &
+           ( PressureSLeftWENO(iAlt, iSpecies) -  HydroPressureSLeftWENO(iAlt,iSpecies) ) )/&
+         ( MeanRhoSWENO(iAlt,iSpecies)*InterfaceSoundSpeedSWENO(iAlt,iSpecies)**2.0)
+
+   enddo !iSpecies = 1, nSpecies 
+  enddo !iAlt = 0, nAlts 
+
+
+  do iAlt = 0, nAlts 
+     do iSpecies = 1, nSpecies
+        NumericalVertVelSWENO(iAlt,iSpecies) = &
+          InterfaceSoundSpeedSWENO(iAlt,iSpecies)*&
+          ( MachSFn4PLeftWENO(iAlt,iSpecies) + &  
+           MachSFn4NRightWENO(iAlt,iSpecies) - &  
+          AUSMMachPressureParamSWENO(iAlt,iSpecies))
+     enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 0, nAlts 
+
+!  do iAlt = 0, nAlts
+!     do iSpecies = 1, nSpecies
+!         NonHydrostaticPressureSLeftWENO  =  PressureSLeftWENO(iAlt,iSpecies) -  HydroPressureSLeftWENO(iAlt,iSpecies)
+!        NonHydrostaticPressureSRightWENO  = PressureSRightWENO(iAlt,iSpecies) - HydroPressureSRightWENO(iAlt,iSpecies)
+!
+!        NumericalPressureSWENO(iAlt,iSpecies) = &
+!             PsiP_LeftWENO(iAlt,iSpecies)*NonHydrostaticPressureSLeftWENO +  &
+!            PsiN_RightWENO(iAlt,iSpecies)*NonHydrostaticPressureSRightWENO - &
+!            KuSParamWENO(iAlt,iSpecies)*PsiP_LeftWENO(iAlt,iSpecies)*PsiN_RightWENO(iAlt,iSpecies)*&
+!            (RhoSLeftWENO(iAlt,iSpecies) + RhoSRightWENO(iAlt,iSpecies))*&
+!             InterfaceSoundSpeedSWENO(iAlt,iSpecies)*&
+!            (VertVelSLeftWENO(iAlt,iSpecies) - VertVelSRightWENO(iAlt,iSpecies))
+!     enddo !iSpecies = 1, nSpecies
+!  enddo !iAlt = 1, nAlts
+
+  do iAlt = 0, nAlts
+     do iSpecies = 1, nSpecies
+        NumericalPressureSWENO(iAlt,iSpecies) = &
+             PsiP_LeftWENO(iAlt,iSpecies)*PressureSLeftWENO(iAlt,iSpecies) +  &
+            PsiN_RightWENO(iAlt,iSpecies)*PressureSRightWENO(iAlt,iSpecies) - &
+            KuSParamWENO(iAlt,iSpecies)*PsiP_LeftWENO(iAlt,iSpecies)*PsiN_RightWENO(iAlt,iSpecies)*&
+            (RhoSLeftWENO(iAlt,iSpecies) + RhoSRightWENO(iAlt,iSpecies))*&
+             InterfaceSoundSpeedSWENO(iAlt,iSpecies)*&
+            (VertVelSLeftWENO(iAlt,iSpecies) - VertVelSRightWENO(iAlt,iSpecies))
+
+        LogNumericalPressureSWENO(iAlt,iSpecies) = dlog(NumericalPressureSWENO(iAlt,iSpecies))
+
+        NumericalHydroPressureSWENO(iAlt,iSpecies) = &
+             PsiP_LeftWENO(iAlt,iSpecies)*HydroPressureSLeftWENO(iAlt,iSpecies) +  &
+            PsiN_RightWENO(iAlt,iSpecies)*HydroPressureSRightWENO(iAlt,iSpecies) 
+
+        LogNumericalHydroPressureSWENO(iAlt,iSpecies) = dlog(NumericalHydroPressureSWENO(iAlt,iSpecies))
+
+     enddo !iSpecies = 1, nSpecies
+  enddo !iAlt = 1, nAlts
+
+  do iAlt = 1, nAlts
+    do iSpecies = 1, nSpecies
+       CellCenteredLogNumericalPressureSWENO(iAlt,iSpecies) = &
+           0.5*( LogNumericalPressureSWENO(iAlt  ,iSpecies) + & 
+                 LogNumericalPressureSWENO(iAlt-1,iSpecies) )
+       CellCenteredLogNumericalHydroPressureSWENO(iAlt,iSpecies) = &
+           0.5*( LogNumericalHydroPressureSWENO(iAlt  ,iSpecies) + & 
+                 LogNumericalHydroPressureSWENO(iAlt-1,iSpecies) )
+
+       CellCenteredNumericalPressureSWENO(iAlt,iSpecies) = &
+           exp(CellCenteredLogNumericalPressureSWENO(iAlt,iSpecies))
+       CellCenteredNumericalHydroPressureSWENO(iAlt,iSpecies) = &
+           exp(CellCenteredLogNumericalHydroPressureSWENO(iAlt,iSpecies))
+    enddo !iSpecies = 1, nSpecies
+  enddo 
+  !ENDWENO STUFF
+  !ENDWENO STUFF
+
+  !BEGINWENOFLUX 
+  do iSpecies = 1, nSpecies
+     do iAlt = 0, nAlts 
+
+        ! Note if V > 0.0, then |V| =  V:  (1/2)*(V + |V|) = V, (1/2)*(V - |V|) = 0.0
+        ! Note if V < 0.0, then |V| = -V:  (1/2)*(V + |V|) = V, (1/2)*(V - |V|) = 0.0
+        RhoSFluxWENO(iAlt,iSpecies) = &
+           0.5* RhoSLeftWENO(iAlt,iSpecies)*&
+                (     NumericalVertVelSWENO(iAlt,iSpecies) +  & 
+                  dabs(NumericalVertVelSWENO(iAlt,iSpecies)) ) + &
+           0.5*RhoSRightWENO(iAlt,iSpecies)*&
+                (     NumericalVertVelSWENO(iAlt,iSpecies) -  & 
+                  dabs(NumericalVertVelSWENO(iAlt,iSpecies)) ) 
+
+        MomentumSFluxWENO(iAlt,iSpecies) = &
+           0.5* RhoSLeftWENO(iAlt,iSpecies)*VertVelSLeftWENO(iAlt,iSpecies)*&
+                (     NumericalVertVelSWENO(iAlt,iSpecies) +    &
+                  dabs(NumericalVertVelSWENO(iAlt,iSpecies)) ) + &
+           0.5*RhoSRightWENO(iAlt,iSpecies)*VertVelSRightWENO(iAlt,iSpecies)*&
+                (     NumericalVertVelSWENO(iAlt,iSpecies) -    &
+                  dabs(NumericalVertVelSWENO(iAlt,iSpecies)) ) 
+     enddo 
+  enddo 
+
+  BulkNumericalVertVelWENO(0:nAlts) = 0.0
+  do iSpecies = 1, nSpecies
+     BulkNumericalVertVelWENO = &
+     BulkNumericalVertVelWENO + &
+           ( RhoSLeftWENO(:,iSpecies) + RhoSRightWENO(:,iSpecies) )*&
+             NumericalVertVelSWENO(:,iSpecies)/&
+             (RhoLeftWENO + RhoRightWENO )
+  enddo 
+
+  do iAlt = 0, nAlts 
+     EnergyFluxWENO(iAlt) = &
+        0.5*( EnergyLeftWENO(iAlt) + PressureLeftWENO(iAlt) )* &
+            ( BulkNumericalVertVelWENO(iAlt) +  &
+          abs(BulkNumericalVertVelWENO(iAlt)) ) + & 
+        0.5*( EnergyRightWENO(iAlt) + PressureRightWENO(iAlt) )* &
+            ( BulkNumericalVertVelWENO(iAlt) -  &
+          abs(BulkNumericalVertVelWENO(iAlt)) ) 
+
+     MomentumFluxWENO(iAlt,1:3) = &
+        0.5*( RhoLeftWENO(iAlt)*VelGDLeftWENO(iAlt,1:3))*&
+            ( BulkNumericalVertVelWENO(iAlt) +  &
+          abs(BulkNumericalVertVelWENO(iAlt)) ) + & 
+        0.5*( RhoRightWENO(iAlt)*VelGDRightWENO(iAlt,1:3))*&
+            ( BulkNumericalVertVelWENO(iAlt) -  &
+          abs(BulkNumericalVertVelWENO(iAlt)) ) 
+  enddo 
+  ! ENDWENOFLUX
+
+  ! BEGINTVD
   ! Establish Cell Interface values 
   ! Get the RhoS facevaluess and Bulk Rho facevalues
    RhoLeft(0:nAlts) = 0.0
   RhoRight(0:nAlts) = 0.0
   do iSpecies = 1, nSpecies
      call calc_tvd_facevalues(LogRhoS(-1:nAlts+2,iSpecies), &
-                      LogRhoSLeft( 0:nAlts  ,iSpecies), &
-                     LogRhoSRight( 0:nAlts  ,iSpecies) )
+                          LogRhoSLeft( 0:nAlts  ,iSpecies), &
+                         LogRhoSRight( 0:nAlts  ,iSpecies) )
       RhoSLeft(:,iSpecies) = exp( LogRhoSLeft(:,iSpecies))
      RhoSRight(:,iSpecies) = exp(LogRhoSRight(:,iSpecies))
      ! Bulk Rho
@@ -1221,8 +1750,8 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
   ! Note: Hydro denotes hydrostatic background
   do iSpecies = 1, nSpecies
      call calc_tvd_facevalues(LogHydroRhoS(-1:nAlts+2,iSpecies), &
-                      LogHydroRhoSLeft( 0:nAlts  ,iSpecies), &
-                     LogHydroRhoSRight( 0:nAlts  ,iSpecies) )
+                          LogHydroRhoSLeft( 0:nAlts  ,iSpecies), &
+                         LogHydroRhoSRight( 0:nAlts  ,iSpecies) )
       HydroRhoSLeft(:,iSpecies) = exp( LogHydroRhoSLeft(:,iSpecies))
      HydroRhoSRight(:,iSpecies) = exp(LogHydroRhoSRight(:,iSpecies))
   enddo 
@@ -1424,7 +1953,7 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
         KpSParam(iAlt,iSpecies) = MachScaling*Kp(iSpecies)
 
         ! Note that MZero ranges from [0, 1.0] (cap at 1.0)
-        MachScaling = 1.0 - MachSZero(iAlt,iSpecies)
+        MachScaling = MachSZero(iAlt,iSpecies)*(1.0 - MachSZero(iAlt,iSpecies))
         KuSParam(iAlt,iSpecies) = MachScaling*Ku(iSpecies)
      enddo 
   enddo 
@@ -1509,6 +2038,7 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
       ! So we want APC Scalar as f(M) ~ Ms^2
       ! Mp_APC ~ f(M)*Kp*dPs/(rhos*cs^2) -> Ms^2*Kp*(dr/Hs)
 !!!!! Hydrostatic Species Use This one
+
       AUSMMachPressureParamS(iAlt,iSpecies) = &
           KpSParam(iAlt,iSpecies)*max( (1.0 - MachSBar2(iAlt,iSpecies)), 0.0)*&
          ( (PressureSRight(iAlt, iSpecies) - HydroPressureSRight(iAlt,iSpecies) ) - &
@@ -1530,54 +2060,61 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
 
   do iAlt = 0, nAlts
      do iSpecies = 1, nSpecies
-! AUSM+-up Version
-!        NumericalPressureS(iAlt,iSpecies) = &
-!             (MeanPressureS(iAlt,iSpecies) - &
-!              MeanHydroPressureS(iAlt,iSpecies) )&
-!           + 0.5*(PsiP_Left(iAlt,iSpecies) - PsiN_Right(iAlt,iSpecies))*&
-!             ( ( PressureSLeft(iAlt,iSpecies) -  HydroPressureSLeft(iAlt,iSpecies)) - &
-!               (PressureSRight(iAlt,iSpecies) - HydroPressureSRight(iAlt,iSpecies))) + &
-!             KuSParam(iAlt,iSpecies)*&
-!              (PsiP_Left(iAlt,iSpecies) + PsiN_Right(iAlt,iSpecies) - 1.0)*&
-!             (MeanPressureS(iAlt,iSpecies) - MeanHydroPressureS(iAlt,iSpecies))
-
-         NonHydrostaticPressureSLeft  =  PressureSLeft(iAlt,iSpecies) -  HydroPressureSLeft(iAlt,iSpecies)
-        NonHydrostaticPressureSRight  = PressureSRight(iAlt,iSpecies) - HydroPressureSRight(iAlt,iSpecies)
-
         NumericalPressureS(iAlt,iSpecies) = &
-             PsiP_Left(iAlt,iSpecies)*NonHydrostaticPressureSLeft +  &
-            PsiN_Right(iAlt,iSpecies)*NonHydrostaticPressureSRight - &
+             PsiP_Left(iAlt,iSpecies)*PressureSLeft(iAlt,iSpecies) +  &
+            PsiN_Right(iAlt,iSpecies)*PressureSRight(iAlt,iSpecies) - &
             KuSParam(iAlt,iSpecies)*PsiP_Left(iAlt,iSpecies)*PsiN_Right(iAlt,iSpecies)*&
             (RhoSLeft(iAlt,iSpecies) + RhoSRight(iAlt,iSpecies))*&
              InterfaceSoundSpeedS(iAlt,iSpecies)*&
             (VertVelSLeft(iAlt,iSpecies) - VertVelSRight(iAlt,iSpecies))
 
-!        NumericalPressureS(iAlt,iSpecies) = &
-!             (PressureS(iAlt,iSpecies) - &
-!              MeanHydroPressureS(iAlt,iSpecies) )&
-!           + 0.5*(PsiP_Left(iAlt,iSpecies) - PsiN_Right(iAlt,iSpecies))*&
-!             ( ( PressureSLeft(iAlt,iSpecies) -  HydroPressureSLeft(iAlt,iSpecies)) - &
-!               (PressureSRight(iAlt,iSpecies) - HydroPressureSRight(iAlt,iSpecies))) + &
-!             KuSParam(iAlt,iSpecies)*&
-!              (PsiP_Left(iAlt,iSpecies) + PsiN_Right(iAlt,iSpecies) - 1.0)*&
-!             (MeanPressureS(iAlt,iSpecies) - MeanHydroPressureS(iAlt,iSpecies))
+        LogNumericalPressureS(iAlt,iSpecies) = dlog(NumericalPressureS(iAlt,iSpecies))
 
+        NumericalHydroPressureS(iAlt,iSpecies) = &
+             PsiP_Left(iAlt,iSpecies)*HydroPressureSLeft(iAlt,iSpecies) +  &
+            PsiN_Right(iAlt,iSpecies)*HydroPressureSRight(iAlt,iSpecies) 
 
+        LogNumericalHydroPressureS(iAlt,iSpecies) = dlog(NumericalHydroPressureS(iAlt,iSpecies))
 
-! SLAU Version
-!        NumericalPressureS(iAlt,iSpecies) = &
-!             (MeanPressureS(iAlt,iSpecies) - &
-!              MeanHydroPressureS(iAlt,iSpecies) )&
-!           + 0.5*(PsiP_Left(iAlt,iSpecies) - PsiN_Right(iAlt,iSpecies))*&
-!             ( ( PressureSLeft(iAlt,iSpecies) -  HydroPressureSLeft(iAlt,iSpecies)) - &
-!               (PressureSRight(iAlt,iSpecies) - HydroPressureSRight(iAlt,iSpecies))) + &
-!              KuSParam(iAlt,iSpecies)*&
-!              (PsiP_Left(iAlt,iSpecies) + PsiN_Right(iAlt,iSpecies) - 1.0)*&
-!             (MeanPressureS(iAlt,iSpecies) - MeanHydroPressureS(iAlt,iSpecies))
-!
      enddo !iSpecies = 1, nSpecies
   enddo !iAlt = 1, nAlts
 
+  do iAlt = 1, nAlts
+    do iSpecies = 1, nSpecies
+       CellCenteredLogNumericalPressureS(iAlt,iSpecies) = &
+           0.5*( LogNumericalPressureS(iAlt  ,iSpecies) + & 
+                 LogNumericalPressureS(iAlt-1,iSpecies) )
+       CellCenteredLogNumericalHydroPressureS(iAlt,iSpecies) = &
+           0.5*( LogNumericalHydroPressureS(iAlt  ,iSpecies) + & 
+                 LogNumericalHydroPressureS(iAlt-1,iSpecies) )
+
+       CellCenteredNumericalPressureS(iAlt,iSpecies) = &
+           exp(CellCenteredLogNumericalPressureS(iAlt,iSpecies))
+       CellCenteredNumericalHydroPressureS(iAlt,iSpecies) = &
+           exp(CellCenteredLogNumericalHydroPressureS(iAlt,iSpecies))
+    enddo !iSpecies = 1, nSpecies
+  enddo 
+! ENDTVD STUFF
+!
+!  do iAlt = 0, nAlts
+!     do iSpecies = 1, nSpecies
+!! AUSM+-up Version
+!         NonHydrostaticPressureSLeft  =  PressureSLeft(iAlt,iSpecies) -  HydroPressureSLeft(iAlt,iSpecies)
+!        NonHydrostaticPressureSRight  = PressureSRight(iAlt,iSpecies) - HydroPressureSRight(iAlt,iSpecies)
+!
+!        NumericalPressureS(iAlt,iSpecies) = &
+!             PsiP_Left(iAlt,iSpecies)*NonHydrostaticPressureSLeft +  &
+!            PsiN_Right(iAlt,iSpecies)*NonHydrostaticPressureSRight - &
+!            KuSParam(iAlt,iSpecies)*PsiP_Left(iAlt,iSpecies)*PsiN_Right(iAlt,iSpecies)*&
+!            (RhoSLeft(iAlt,iSpecies) + RhoSRight(iAlt,iSpecies))*&
+!             InterfaceSoundSpeedS(iAlt,iSpecies)*&
+!            (VertVelSLeft(iAlt,iSpecies) - VertVelSRight(iAlt,iSpecies))
+!!
+!     enddo !iSpecies = 1, nSpecies
+!  enddo !iAlt = 1, nAlts
+! ENDTVD STUFF
+
+  !BEGINTVDFLUX 
   do iSpecies = 1, nSpecies
      do iAlt = 0, nAlts 
 
@@ -1627,25 +2164,11 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
             ( BulkNumericalVertVel(iAlt) -  &
           abs(BulkNumericalVertVel(iAlt)) ) 
 
-     !if (BulkNumericalVertVel(iAlt) .ge. 0.0) then 
-     !   EnergyFlux(iAlt) = &
-     !     ( EnergyLeft(iAlt) + PressureLeft(iAlt) ) &
-     !       *BulkNumericalVertVel(iAlt) 
-!
-!        MomentumFlux(iAlt,1:3) = &
-!             RhoLeft(iAlt)*VelGDLeft(iAlt,1:3)*&
-!             BulkNumericalVertVel(iAlt) 
-!     else
-!        EnergyFlux(iAlt) = &
-!          ( EnergyRight(iAlt) + PressureRight(iAlt) ) &
-!            *BulkNumericalVertVel(iAlt) 
-!
-!        MomentumFlux(iAlt,1:3) = &
-!             RhoRight(iAlt)*VelGDRight(iAlt,1:3)*&
-!             BulkNumericalVertVel(iAlt) 
-!     endif
   enddo 
+  !ENDTVDFLUX
 
+
+  !BEGINDIVFLUX 
   ! Define Cell Volumes and radial Areas
   do iAlt = 1, nAlts
      AreaFunction_P12(iAlt) = Area_P12(iAlt)
@@ -1653,31 +2176,47 @@ subroutine calc_all_fluxes_hydro(DtIn, RhoS, PressureS, HydroPressureS, HydroRho
      LocalCellVolume(iAlt) = CellVol1D(iAlt)
   enddo 
 
-
   ! Divergence of Fluxes
   do iAlt = 1, nAlts
      do iSpecies = 1, nSpecies
         DivRhoSFlux(iAlt,iSpecies) = &
-          ( AreaFunction_P12(iAlt)*RhoSFlux(iAlt  ,iSpecies) - &
-            AreaFunction_M12(iAlt)*RhoSFlux(iAlt-1,iSpecies) )/&
+          ( AreaFunction_P12(iAlt)*RhoSFluxWENO(iAlt  ,iSpecies) - &
+            AreaFunction_M12(iAlt)*RhoSFluxWENO(iAlt-1,iSpecies) )/&
             LocalCellVolume(iAlt)
+
         DivMomentumSFlux(iAlt,iSpecies) = &
-          ( AreaFunction_P12(iAlt)*MomentumSFlux(iAlt  ,iSpecies) - &
-            AreaFunction_M12(iAlt)*MomentumSFlux(iAlt-1,iSpecies) )/&
+          ( AreaFunction_P12(iAlt)*MomentumSFluxWENO(iAlt  ,iSpecies) - &
+            AreaFunction_M12(iAlt)*MomentumSFluxWENO(iAlt-1,iSpecies) )/&
             LocalCellVolume(iAlt)
+
         ! Add PRessure Gradient
+        ! Note that we want Del(Pressure') = Del(Pressure) - Del(PressureH)
+        !  --> Del(P ) = dP/dr = P*d[Ln(P)]/dr
+        !  --> Del(Ph) = dPh/dr = Ph*d[Ln(Ph)]/dr
+
+        ! Step1 Add on the Del(P)
         DivMomentumSFlux(iAlt,iSpecies) = &
         DivMomentumSFlux(iAlt,iSpecies) + &
-           (NumericalPressureS(iAlt   ,iSpecies) - &
-            NumericalPressureS(iAlt-1,iSpecies))/dAlt_C(iAlt)
+           CellCenteredNumericalPressureSWENO(iAlt,iSpecies)*&
+           (LogNumericalPressureSWENO(iAlt  ,iSpecies) - &
+            LogNumericalPressureSWENO(iAlt-1,iSpecies))/dAlt_C(iAlt)
+
+        ! Subtract Away Hydrostatic Part
+        DivMomentumSFlux(iAlt,iSpecies) = &
+        DivMomentumSFlux(iAlt,iSpecies) - &
+           CellCenteredNumericalHydroPressureSWENO(iAlt,iSpecies)*&
+           (LogNumericalHydroPressureSWENO(iAlt  ,iSpecies) - &
+            LogNumericalHydroPressureSWENO(iAlt-1,iSpecies))/dAlt_C(iAlt)
      enddo !iAlt
+
+
      DivMomentumFlux(iAlt,1:3) = &
-          ( AreaFunction_P12(iAlt)*MomentumFlux(iAlt  ,1:3) - &
-            AreaFunction_M12(iAlt)*MomentumFlux(iAlt-1,1:3) )/&
+          ( AreaFunction_P12(iAlt)*MomentumFluxWENO(iAlt  ,1:3) - &
+            AreaFunction_M12(iAlt)*MomentumFluxWENO(iAlt-1,1:3) )/&
             LocalCellVolume(iAlt)
      DivEnergyFlux(iAlt) = &
-          ( AreaFunction_P12(iAlt)*EnergyFlux(iAlt  ) - &
-            AreaFunction_M12(iAlt)*EnergyFlux(iAlt-1) )/&
+          ( AreaFunction_P12(iAlt)*EnergyFluxWENO(iAlt  ) - &
+            AreaFunction_M12(iAlt)*EnergyFluxWENO(iAlt-1) )/&
             LocalCellVolume(iAlt)
 
   enddo !iSpecies = 1, nSpecies

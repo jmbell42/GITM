@@ -86,7 +86,8 @@ subroutine init_altitude
 
   IsDone = .false.
 
-  dHFactor = 0.3
+  ! 0.3 was our original dH with 50 Alts
+  dHFactor = 0.3*(50.0/100.0)
 
   do iAlt=1,nAlts
 

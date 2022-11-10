@@ -231,7 +231,7 @@ sub set_planet{
     if($Planet eq 'Earth'){
           $nLon = 9;
           $nLat = 9;
-          $nAlt = 50;
+          $nAlt = 100;
           $MaxBlock = 1;
     }elsif($Planet eq 'LV-426'){
           $nLon = 9;
