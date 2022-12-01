@@ -79,6 +79,7 @@ OBJECTS = \
 	divergence.o\
 	exchange_messages_sphere.o\
 	finalize.o\
+	get_aurora.o\
 	get_glow.o\
 	get_location.o \
 	get_potential.o\

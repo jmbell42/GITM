@@ -3,7 +3,6 @@
 
 subroutine calc_GITM_sources(iBlock)
 
-  ! THIS IS THE DEVELOPMENT BRANCH !!!!
   use ModInputs
   use ModSources
   use ModGITM
@@ -120,6 +119,10 @@ subroutine calc_GITM_sources(iBlock)
   if (iDebugLevel > 4) write(*,*) "=====> Efield", iproc
   if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
   call calc_efield(iBlock)
+
+  if (iDebugLevel > 4) write(*,*) "=====> get_aurora", iproc
+  if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
+  call get_aurora(iBlock)
 
   if (iDebugLevel > 4) write(*,*) "=====> Aurora", iproc
   if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
