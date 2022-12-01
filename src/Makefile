@@ -39,6 +39,7 @@ MODULES = \
 	ModSami.o\
 	ModSatellites.o\
 	ModSize.o\
+	ModSmoothDrivers.o\
 	ModSources.o\
 	ModSphereInterface.o\
 	ModTides.o\
