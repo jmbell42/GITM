@@ -499,21 +499,52 @@ subroutine initialize_gitm(TimeIn)
 
   if (.not.Is1D) call exchange_messages_sphere
 
-  call calc_pressure
-
-  ! The iLon and iLat are dummy variables...
-  call UA_calc_electrodynamics(iLon,iLat)
+  ! Initialize the Grid Mesh Coefs
   do iBlock = 1, nBlocks
      call init_mesh_lats(iBlock)
      call init_mesh_lons(iBlock)
      call init_mesh_alts(iBlock)
   enddo 
+  ! Initialize The Electrodynamics Variables
+  call init_electrodynamics
+  do iBlock = 1, nBlocks
+     if(Is1D) then
+     call init_electrodynamics_1d(iBlock)
+     endif!(Is1D) then
+  enddo 
+
+  ! Perform Initial Calculations
+  call calc_pressure
+  call fill_photo
+  ! Calculate  
+  do iBlock = 1, nBlocks
+     call    calc_physics(iBlock)
+     call      calc_rates(iBlock)
+     call calc_collisions(iBlock)
+     call  calc_viscosity(iBlock)
+     call calc_eddy_diffusion_coefficient(iBlock)
+
+     ! Set up Variables:----
+     call get_potential(iBlock)
+     ! Update Variables
+     call get_potential(iBlock)
+     call calc_efield(iBlock)
+
+     ! Set up Variables:----
+     call get_aurora(iBlock)
+     ! Update Variables
+     call get_aurora(iBlock)
+
+  enddo
+
 
   do iBlock = 1, nBlocks
-    call calc_eddy_diffusion_coefficient(iBlock)
-    call calc_rates(iBlock)
-    call calc_viscosity(iBlock)
-  enddo
+    if(Is1D) then
+      call UA_calc_electrodynamics_1d(iBlock)
+    else
+      call UA_calc_electrodynamics(iLon,iLat,iBlock)
+    endif
+  enddo 
 
   call end_timing("initialize")
 

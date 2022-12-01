@@ -23,8 +23,6 @@ subroutine init_get_aurora
   logical :: IsFirstTime = .true.
   integer :: iError
 
-  integer :: nAmieLats, nAmieMlts, nAmieBlocks
-
   iError = 0
 
   if (.not.IsFirstTime .or. IsFramework) return
@@ -49,11 +47,14 @@ subroutine init_get_aurora
      call initialize_fta
   endif
 
+
 end subroutine init_get_aurora
+
 
 !--------------------------------------------------------------------
 ! get_aurora
 !--------------------------------------------------------------------
+
 subroutine get_aurora(iBlock)
 
   use ModGITM
@@ -67,6 +68,7 @@ subroutine get_aurora(iBlock)
   use ModFtaModel, only: run_fta_model
   use ModEIE_Interface, only: UAl_UseGridBasedEIE
   use ModMpi
+  use ModSmoothDrivers
 
   implicit none
 
@@ -78,6 +80,7 @@ subroutine get_aurora(iBlock)
 
   real, dimension(-1:nLons+2, -1:nLats+2) :: lats, mlts, EFlux
   real :: by, bz, CuspLat, CuspMlt
+  real :: tSimCurrent
 
   call start_timing("get_aurora")
   call report("get_aurora",2)
@@ -90,18 +93,50 @@ subroutine get_aurora(iBlock)
      return
   endif
 
-  ! -----------------------------------------------------
-  ! Now get the aurora.
-  ! This assumes that the field lines are basically
-  ! vertical starting at the top of the model.
-  ! -----------------------------------------------------
-  if (floor((tSimulation-dt)/DtAurora) /= &
-       floor((tsimulation)/DtAurora) .or. IsFirstAurora(iBlock)) then
+  ! CHECK UPDATEPOTENTIAL
+  if (floor((tSimulation-Dt)/DtAurora) /= &
+      floor((tSimulation   )/DtAurora) .or. IsFirstAurora(iBlock)) then
 
-     call report("Getting Aurora",1)
-     call init_get_aurora 
+     if(IsFirstAurora(iBlock)) then
+        ! If this is the first time, then don't alter time
+        LastAuroraTime = CurrentTime  ! real(iReal8_) type
+        tSimLastAurora = tSimulation  ! default real type
+        tSimNextAurora = tSimulation  ! default real type
+        !CurrentTime = CurrentTime    ! No need to update time
+     else
+        ! It is time to update potential, but is not the first time
+        ! Store current time
+        LastAuroraTime = CurrentTime
+        ! Increment the time forward by DtAurora for calcs
+           CurrentTime = CurrentTime + DtAurora
+        tSimNextAurora = tSimulation + DtAurora
+     endif
 
-     iAlt = nAlts+1
+     call report("Getting Aurora ",1)
+
+     call init_get_aurora
+
+     iAlt = nAlts + 1
+
+     ! Store the Previous Variables Here
+     PreviousElectronAverageEnergy(:,:,iBlock) = &
+             ElectronAverageEnergy(:,:) 
+     PreviousElectronEnergyFlux(:,:,iBlock) = &
+             ElectronEnergyFlux(:,:) 
+     PreviousIonAverageEnergy(:,:,iBlock) = &
+             IonAverageEnergy(:,:) 
+     PreviousIonEnergyFlux(:,:,iBlock) = &
+             IonEnergyFlux(:,:) 
+     ! Model Specific
+     PreviousElectronEnergyFluxMono(:,:,iBlock) = &
+             ElectronEnergyFluxMono(:,:) 
+     PreviousElectronEnergyFluxWave(:,:,iBlock) = &
+             ElectronEnergyFluxWave(:,:) 
+     PreviousElectronNumberFluxMono(:,:,iBlock) = &
+             ElectronNumberFluxMono(:,:) 
+     PreviousElectronNumberFluxWave(:,:,iBlock) = &
+             ElectronNumberFluxWave(:,:) 
+
 
      if (UseNewellAurora) then
         call run_newell(iBlock)
@@ -118,14 +153,14 @@ subroutine get_aurora(iBlock)
              MLatitude(-1:nLons+2,-1:nLats+2,iAlt,iBlock), iError)
 
         if (iError /= 0) then
-           write(*,*) "Error in routine get_potential (UA_SetGrid):"
+           write(*,*) "Error in routine get_aurora (UA_SetGrid):"
            write(*,*) iError
-           call stop_gitm("Stopping in get_potential")
+           call stop_gitm("Stopping in get_aurora")
         endif
 
         call UA_GetAveE(ElectronAverageEnergy, iError)
         if (iError /= 0) then
-           write(*,*) "Error in get_potential (UA_GetAveE):"
+           write(*,*) "Error in get_aurora (UA_GetAveE):"
            write(*,*) iError
            ElectronAverageEnergy = 1.0
         endif
@@ -150,7 +185,7 @@ subroutine get_aurora(iBlock)
 
         call UA_GetEFlux(ElectronEnergyFlux, iError)
         if (iError /= 0) then
-           write(*,*) "Error in get_potential (UA_GetEFlux):"
+           write(*,*) "Error in get_aurora (UA_GetEFlux):"
            write(*,*) iError
            ElectronEnergyFlux = 0.1
         endif
@@ -163,14 +198,14 @@ subroutine get_aurora(iBlock)
 
            call UA_GetIonAveE(IonAverageEnergy, iError)
            if (iError /= 0) then
-              write(*,*) "Error in get_potential (UA_GetAveE):"
+              write(*,*) "Error in get_aurora (UA_GetAveE):"
               write(*,*) iError
               IonAverageEnergy = 1.0
            endif
 
            call UA_GetIonEFlux(IonEnergyFlux, iError)
            if (iError /= 0) then
-              write(*,*) "Error in get_potential (UA_GetEFlux):"
+              write(*,*) "Error in get_aurora (UA_GetEFlux):"
               write(*,*) iError
               IonEnergyFlux = 0.1
            endif
@@ -223,20 +258,126 @@ subroutine get_aurora(iBlock)
           enddo
 
        endif
-
-    endif
+     endif
 
      if (iDebugLevel > 2) &
           write(*,*) "==> Max, electron_ave_ene : ", &
           maxval(ElectronAverageEnergy), &
           maxval(ElectronEnergyFlux)
 
-     IsFirstAurora(iBlock) = .false.
+     ! Extract our Variables for the "NExt"
+     ! or updated state
+     NextElectronAverageEnergy(:,:,iBlock) = &
+             ElectronAverageEnergy(:,:) 
+     NextElectronEnergyFlux(:,:,iBlock) = &
+             ElectronEnergyFlux(:,:) 
+     NextIonAverageEnergy(:,:,iBlock) = &
+             IonAverageEnergy(:,:) 
+     NextIonEnergyFlux(:,:,iBlock) = &
+             IonEnergyFlux(:,:) 
+     ! Model Specific
+     NextElectronEnergyFluxMono(:,:,iBlock) = &
+             ElectronEnergyFluxMono(:,:) 
+     NextElectronEnergyFluxWave(:,:,iBlock) = &
+             ElectronEnergyFluxWave(:,:) 
+     NextElectronNumberFluxMono(:,:,iBlock) = &
+             ElectronNumberFluxMono(:,:) 
+     NextElectronNumberFluxWave(:,:,iBlock) = &
+             ElectronNumberFluxWave(:,:) 
 
-  endif
+     ! --- After the Updates
+     if(IsFirstAurora(iBlock)) then
+     else
+        !CurrentTime = CurrentTime !- DtAurora
+        CurrentTime = LastAuroraTime ! Re-set the time back
+     endif
+
+  endif ! CHECK UPDATEAURORA
+
+  if(IsFirstAurora(iBlock)) then
+     ! General AuroralVariables
+     ElectronAverageEnergy(:,:) = &
+         NextElectronAverageEnergy(:,:,iBlock) 
+     ElectronEnergyFlux(:,:) = &
+         NextElectronEnergyFlux(:,:,iBlock) 
+     IonAverageEnergy(:,:) = &
+         NextIonAverageEnergy(:,:,iBlock) 
+     IonEnergyFlux(:,:) = &
+         NextIonEnergyFlux(:,:,iBlock) 
+     ! Model Specific
+     ElectronEnergyFluxMono(:,:) = &
+         NextElectronEnergyFluxMono(:,:,iBlock) 
+     ElectronEnergyFluxWave(:,:) = &
+         NextElectronEnergyFluxWave(:,:,iBlock) 
+     ElectronNumberFluxMono(:,:) = &
+         NextElectronNumberFluxMono(:,:,iBlock) 
+     ElectronNumberFluxWave(:,:) = &
+         NextElectronNumberFluxWave(:,:,iBlock) 
+
+     IsFirstAurora(iBlock) = .false.
+  else
+
+! Going from y(t0) to y(t1) over (t1-t0) time
+!  y(t) = y(t1) - dy/dt*(t1 - t);  dy/dt ~ [y(t1) - y(t0)]/(t1-t0)
+!  y(t0) = y(t1) - dy/dt*(t1 - t0) = y(t1) - [y(t1) - y(t0)] = y(t0)
+     ElectronAverageEnergy(-1:nLons+2,-1:nLats+2) = &  
+        NextElectronAverageEnergy(-1:nLons+2,-1:nLats+2,iBlock) - &
+        (   NextElectronAverageEnergy(-1:nLons+2,-1:nLats+2,iBlock) - &
+        PreviousElectronAverageEnergy(-1:nLons+2,-1:nLats+2,iBlock) )* &
+                (tSimNextAurora - tSimulation)/DtAurora
+
+     ElectronEnergyFlux(-1:nLons+2,-1:nLats+2) = &  
+        NextElectronEnergyFlux(-1:nLons+2,-1:nLats+2,iBlock) - &
+        (   NextElectronEnergyFlux(-1:nLons+2,-1:nLats+2,iBlock) - &
+        PreviousElectronEnergyFlux(-1:nLons+2,-1:nLats+2,iBlock) )* &
+                (tSimNextAurora - tSimulation)/DtAurora
+
+     IonAverageEnergy(-1:nLons+2,-1:nLats+2) = &  
+        NextIonAverageEnergy(-1:nLons+2,-1:nLats+2,iBlock) - &
+        (   NextIonAverageEnergy(-1:nLons+2,-1:nLats+2,iBlock) - &
+        PreviousIonAverageEnergy(-1:nLons+2,-1:nLats+2,iBlock) )* &
+                (tSimNextAurora - tSimulation)/DtAurora
+
+     IonEnergyFlux(-1:nLons+2,-1:nLats+2) = &  
+        NextIonEnergyFlux(-1:nLons+2,-1:nLats+2,iBlock) - &
+        (   NextIonEnergyFlux(-1:nLons+2,-1:nLats+2,iBlock) - &
+        PreviousIonEnergyFlux(-1:nLons+2,-1:nLats+2,iBlock) )* &
+                (tSimNextAurora - tSimulation)/DtAurora
+
+     ! Model Specific
+     ElectronEnergyFluxMono(-1:nLons+2,-1:nLats+2) = &  
+        NextElectronEnergyFluxMono(-1:nLons+2,-1:nLats+2,iBlock) - &
+        (   NextElectronEnergyFluxMono(-1:nLons+2,-1:nLats+2,iBlock) - &
+        PreviousElectronEnergyFluxMono(-1:nLons+2,-1:nLats+2,iBlock) )* &
+                (tSimNextAurora - tSimulation)/DtAurora
+
+     ElectronEnergyFluxWave(-1:nLons+2,-1:nLats+2) = &  
+        NextElectronEnergyFluxWave(-1:nLons+2,-1:nLats+2,iBlock) - &
+        (   NextElectronEnergyFluxWave(-1:nLons+2,-1:nLats+2,iBlock) - &
+        PreviousElectronEnergyFluxWave(-1:nLons+2,-1:nLats+2,iBlock) )* &
+                (tSimNextAurora - tSimulation)/DtAurora
+
+     ElectronNumberFluxMono(-1:nLons+2,-1:nLats+2) = &  
+        NextElectronNumberFluxMono(-1:nLons+2,-1:nLats+2,iBlock) - &
+        (   NextElectronNumberFluxMono(-1:nLons+2,-1:nLats+2,iBlock) - &
+        PreviousElectronNumberFluxMono(-1:nLons+2,-1:nLats+2,iBlock) )* &
+                (tSimNextAurora - tSimulation)/DtAurora
+
+     ElectronNumberFluxWave(-1:nLons+2,-1:nLats+2) = &  
+        NextElectronNumberFluxWave(-1:nLons+2,-1:nLats+2,iBlock) - &
+        (   NextElectronNumberFluxWave(-1:nLons+2,-1:nLats+2,iBlock) - &
+        PreviousElectronNumberFluxWave(-1:nLons+2,-1:nLats+2,iBlock) )* &
+                (tSimNextAurora - tSimulation)/DtAurora
+
+  endif ! End the IsFirstAurora Check
+
+  if (iDebugLevel > 1) &
+       write(*,*) "==> Min, Max, CPC Potential : ", &
+       minval(Potential(:,:,:,iBlock))/1000.0, &
+       maxval(Potential(:,:,:,iBlock))/1000.0, &
+       (maxval(Potential(:,:,:,iBlock))-minval(Potential(:,:,:,iBlock)))/1000.0
 
   call end_timing("get_aurora")
 
 end subroutine get_aurora
-
 

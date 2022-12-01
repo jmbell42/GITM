@@ -8,6 +8,10 @@ subroutine init_get_potential
   use ModIndicesInterfaces
   use ModInputs
   use ModUserGITM
+  use ModNewell
+  use ModOvationSME
+  use ModAeAuroralModel
+  use ModFtaModel
   use ModEIE_Interface, only: EIEr3_HaveLats, EIEr3_HaveMLTs
 
   implicit none
@@ -28,7 +32,23 @@ subroutine init_get_potential
 
   IsFirstTime = .false.
 
-
+!  if (UseNewellAurora) then
+!     call init_newell
+!     UseIMF = .true.
+!  endif
+!
+!  if (UseOvationSME) then
+!!     call read_ovationsm_files
+!  endif
+!
+!  if (UseAeModel) then
+!     call read_ae_model_files(iError)
+!  endif
+!
+!  if (UseFtaModel) then
+!     call initialize_fta
+!  endif
+!
   call report("AMIE vs Weimer",4)
 
   !!! Xing Meng Nov 2018 added UseRegionalAMIE to set up a local region
@@ -266,8 +286,13 @@ subroutine get_potential(iBlock)
   use ModIndicesInterfaces
   use ModInputs
   use ModUserGITM
+  use ModNewell
+  use ModOvationSME, only: run_ovationsme
+  use ModAeAuroralModel, only: run_ae_model
+  use ModFtaModel, only: run_fta_model
   use ModEIE_Interface, only: UAl_UseGridBasedEIE
   use ModMpi
+  use ModSmoothDrivers
 
   implicit none
 
@@ -276,6 +301,7 @@ subroutine get_potential(iBlock)
   integer :: iError, iLat, iLon, iAlt, iPot, nPot, iDir, nDir=1
   logical :: IsFirstTime = .true.
   logical :: IsFirstPotential(nBlocksMax) = .true.
+  logical :: IsFirstAurora(nBlocksMax) = .true.
   real    :: mP, dis, TempWeight
   real    ::  LocalSumDiffPot, MeanDiffPot
 
@@ -291,12 +317,31 @@ subroutine get_potential(iBlock)
   iError = 0
 
   if (index(cPlanet,"Earth") == 0) then 
+
      potential = 0.0
      return
+
   endif
 
+  ! JMB: Update Potential Calcs if proper Cadence
   if (floor((tSimulation-Dt)/DtPotential) /= &
-       floor((tsimulation)/DtPotential) .or. IsFirstPotential(iBlock)) then
+      floor((tSimulation   )/DtPotential) .or. IsFirstPotential(iBlock)) then
+
+     if(IsFirstPotential(iBlock)) then
+        ! If this is the first time, then don't alter time
+        LastPotentialTime = CurrentTime  ! real(iReal8_) type
+        tSimLastPotential = tSimulation  ! default real type
+        ! No Need to update Current Time
+        tSimNextPotential = tSimulation  ! default real type
+     else
+        ! It is time to update potential, but is not the first time
+        ! Store current time
+        LastPotentialTime = CurrentTime   ! Used when we reset time below
+        tSimLastPotential = tSimulation + DtPotential
+        ! Increment the time forward by DtPotential for calcs
+        CurrentTime = CurrentTime + DtPotential
+        tSimNextPotential = tSimulation + DtPotential
+     endif
 
      call report("Setting up IE Grid",1)
 
@@ -311,8 +356,8 @@ subroutine get_potential(iBlock)
 
      call report("Getting Potential",1)
 
-     Potential(:,:,:,iBlock) = 0.0
-
+     ! The Current potential becomes our Previous Potential
+     ! DO IALT
      do iAlt=-1,nAlts+2
 
         call UA_SetGrid(                    &
@@ -338,7 +383,6 @@ subroutine get_potential(iBlock)
            write(*,*) "Error in get_potential (UA_GetPotential):"
            write(*,*) iError
            TempPotential = 0.0
-!           call stop_gitm("Stopping in get_potential")
         endif
 
         nDir = 1
@@ -369,10 +413,6 @@ subroutine get_potential(iBlock)
               if (iDebugLevel > 1) &
                    write(*,*) "==> Reading AMIE PotentialY for time :",CurrentTime
               call get_AMIE_PotentialY(CurrentTime+TimeDelayHighLat)
-!              the following setgrid seems unnecessary
-!              call UA_SetGrid(                    &
-!                   MLT(-1:nLons+2,-1:nLats+2,iAlt), &
-!                   MLatitude(-1:nLons+2,-1:nLats+2,iAlt,iBlock), iError)
               call UA_GetPotential(AMIEPotential(:,:,2), iError)
               if (iError /= 0) then
                  write(*,*) "Error in get_potential (UA_GetPotential) for AMIE PotentialY:"
@@ -500,26 +540,66 @@ subroutine get_potential(iBlock)
 
         endif
 
-        Potential(:,:,iAlt,iBlock) = TempPotential(:,:,1)
-        if (UseTwoAMIEPotentials) then
-           PotentialY(:,:,iAlt,iBlock) = TempPotential(:,:,2)
+        ! Store the Old  Potentials
+        PreviousPotential(-1:nLons+2,-1:nLats+2,iAlt,iBlock) =  &
+                Potential(-1:nLons+2,-1:nLats+2,iAlt,iBlock) 
+        PreviousPotentialY(-1:nLons+2,-1:nLats+2,iAlt,iBlock) =  &
+                PotentialY(-1:nLons+2,-1:nLats+2,iAlt,iBlock) 
+
+        ! Store the Updated Potentials
+        NextPotential(-1:nLons+2,-1:nLats+2,iAlt,iBlock) = &  
+        TempPotential(-1:nLons+2,-1:nLats+2,1) 
+        if (UseTwoAMIEPotentials) then ! CHECK TWOAMIE
+           NextPotentialY(-1:nLons+2,-1:nLats+2,iAlt,iBlock) = &  
+            TempPotential(-1:nLons+2,-1:nLats+2,2) 
         else
-           PotentialY(:,:,iAlt,iBlock) = Potential(:,:,iAlt,iBlock)
-        endif
+           NextPotentialY(-1:nLons+2,-1:nLats+2,iAlt,iBlock) = &  
+            TempPotential(-1:nLons+2,-1:nLats+2,1) 
+        endif!CHECK TWOAMIE
 
-        !----------------------------------------------
-        ! Another example of user output
+     enddo ! DO IALT
 
-        if (iAlt == 1) then 
+     ! --- After the Updates
+     if(IsFirstPotential(iBlock)) then
+        ! No need to reset
+     else
+        ! re-set the time
+        CurrentTime = LastPotentialTime
+     endif
 
-           UserData2d(1:nLons,1:nLats,1,1,iBlock) = &
-                TempPotential(1:nLons,1:nLats,1)/1000.0
-        endif
+  endif ! CHECK UPDATEPOTENTIAL
+   
+  ! JMB Testing
+  if(IsFirstPotential(iBlock)) then
+     ! Special Case of the First Potential
+     ! Store Previous Potential with current time
+     PreviousPotential(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) = &  
+         NextPotential(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) 
+     PreviousPotentialY(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) = &  
+         NextPotentialY(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) 
 
-     enddo
+     ! Actual Variable Update
+     Potential(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) = &  
+        NextPotential(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) 
+     PotentialY(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) = &  
+        NextPotentialY(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) 
 
      IsFirstPotential(iBlock) = .false.
+  else
+     ! Going from y(t0) to y(t1) over (t1-t0) time
+     !  y(t) = y(t1) - dy/dt*(t1 - t);  dy/dt ~ [y(t1) - y(t0)]/(t1-t0)
+     !  y(t0) = y(t1) - dy/dt*(t1 - t0) = y(t1) - [y(t1) - y(t0)] = y(t0)
+     Potential(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) = &  
+           NextPotential(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) - &
+           (   NextPotential(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) - &
+           PreviousPotential(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) )* &
+                (tSimNextPotential - tSimulation)/DtPotential
 
+     PotentialY(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) = &  
+           NextPotentialY(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) - &
+           (   NextPotentialY(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) - &
+           PreviousPotentialY(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) )* &
+                (tSimNextPotential - tSimulation)/DtPotential
   endif
 
   if (iDebugLevel > 1) &

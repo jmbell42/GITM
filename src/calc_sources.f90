@@ -7,12 +7,14 @@ subroutine calc_GITM_sources(iBlock)
   use ModSources
   use ModGITM
   use ModPlanet, only: IsVenus
+  use ModTime, only : tSimulation
 
   implicit none
 
   integer, intent(in) :: iBlock
 
   integer :: iError
+  integer :: iLon, iLat, iAlt, iSpecies
 
   call report("calc_GITM_sources",1)
 
@@ -23,9 +25,24 @@ subroutine calc_GITM_sources(iBlock)
   ! ---------------------------------------------------------------
   !/
 
-  call calc_eddy_diffusion_coefficient(iBlock)  
-  call calc_rates(iBlock)
+  call    calc_physics(iBlock)
+  call      calc_rates(iBlock)
   call calc_collisions(iBlock)
+  call calc_eddy_diffusion_coefficient(iBlock)  
+
+  call get_potential(iBlock)
+  call calc_efield(iBlock)
+  call get_aurora(iBlock)
+  call aurora(iBlock)
+
+  if (floor((tSimulation-Dt)/DtPotential) /= &
+      floor((tsimulation   )/DtPotential) ) then
+     if (UseDynamo .and. .not. Is1D) then
+        call UA_calc_electrodynamics(iLon, iLat,iBlock)
+     else
+        call UA_calc_electrodynamics_1d(iBlock)
+     endif
+  endif
 
   !\
   ! ---------------------------------------------------------------
@@ -41,11 +58,9 @@ subroutine calc_GITM_sources(iBlock)
   if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
 
   if (UseSolarHeating .or. UseIonChemistry) then
-
      ! So far, calc_physics only has stuff that is needed for solar
      ! euv, such as solar zenith angles, and local time.
-
-     call calc_physics(iBlock)
+     ! call calc_physics(iBlock)
      call euv_ionization_heat(iBlock)
 
   endif
@@ -72,7 +87,6 @@ subroutine calc_GITM_sources(iBlock)
   !\
   ! IR Heating (Venus Only) ---------------------------------------
   !/
-
   QnirTOT(:,:,:,:) = 0.0
   if (UseIRHeating .and. isVenus) then
      call calc_ir_heating(iBlock)
@@ -87,7 +101,6 @@ subroutine calc_GITM_sources(iBlock)
   !\
   ! Ion Drag ----------------------------------------------------
   !/
-
   if (UseIonDrag) then
      call calc_ion_drag(iBlock)
   else
@@ -99,7 +112,6 @@ subroutine calc_GITM_sources(iBlock)
   !\
   ! Viscosity ----------------------------------------------------
   !/
-
   if (UseViscosity) then
      call calc_viscosity(iBlock)
   else
@@ -111,22 +123,17 @@ subroutine calc_GITM_sources(iBlock)
   ! These terms are for the ionosphere
   ! ---------------------------------------------------------------
   !/
+!  if (iDebugLevel > 4) write(*,*) "=====> get_potential", iproc
+!  if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
+!  call get_potential(iBlock)
 
-  if (iDebugLevel > 4) write(*,*) "=====> get_potential", iproc
-  if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
-  call get_potential(iBlock)
+!  if (iDebugLevel > 4) write(*,*) "=====> Efield", iproc
+!  if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
+!  call calc_efield(iBlock)
 
-  if (iDebugLevel > 4) write(*,*) "=====> Efield", iproc
-  if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
-  call calc_efield(iBlock)
-
-  if (iDebugLevel > 4) write(*,*) "=====> get_aurora", iproc
-  if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
-  call get_aurora(iBlock)
-
-  if (iDebugLevel > 4) write(*,*) "=====> Aurora", iproc
-  if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
-  call aurora(iBlock)
+!  if (iDebugLevel > 4) write(*,*) "=====> Aurora", iproc
+!  if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
+!  call aurora(iBlock)
 
   if (iDebugLevel > 4) write(*,*) "=====> Ion Velocity", iproc
   if (UseBarriers) call MPI_BARRIER(iCommGITM,iError)
