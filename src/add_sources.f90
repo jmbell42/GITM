@@ -21,18 +21,17 @@ subroutine add_sources
 
   call report("add_sources",2)
 
-  if (floor((tSimulation-dt)/DtPotential) /= &
-       floor((tsimulation)/DtPotential) .or. IsFirstTime) then
-     if (UseDynamo .and. .not. Is1D) then
-        call UA_calc_electrodynamics(iLon, iLat)
-     else
-        call UA_calc_electrodynamics_1d
-     endif
-     IsFirstTime = .false.
-  endif
+!  if (floor((tSimulation-dt)/DtPotential) /= &
+!       floor((tsimulation)/DtPotential) .or. IsFirstTime) then
+!     if (UseDynamo .and. .not. Is1D) then
+!        call UA_calc_electrodynamics(iLon, iLat)
+!     else
+!        call UA_calc_electrodynamics_1d
+!     endif
+!     IsFirstTime = .false.
+!  endif
 
   do iBlock = 1, nBlocks
-
      ! All the physics is left out or added in in calc_GITM_sources.  If
      ! you want to turn something off, look for the UseWhatever variable
      ! in calc_GITM_sources.  Then fill the source with 0.0, so this routine

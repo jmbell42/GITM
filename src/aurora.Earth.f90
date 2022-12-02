@@ -11,6 +11,7 @@ subroutine aurora(iBlock)
   use ModUserGITM
   use ModMpi
   use ModIndicesInterfaces
+  use ModSmoothDrivers
 
   implicit none
 
@@ -69,86 +70,212 @@ subroutine aurora(iBlock)
   HPn = 0.0
   HPs = 0.0
 
-  if (IsFirstTime(iBlock)) then
-     
-     if (UseFangEnergyDeposition) then
+  ! BEGIN DTCHECK
+  if (floor((tSimulation-Dt)/DtAurora) /= &
+      floor((tSimulation   )/DtAurora) .or. IsFirstTime(iBlock)) then
 
-        ! Electrons
-        allocate(Fang_Ci(ED_N_Energies,8), stat=iErr)
-        allocate(Fang_y(ED_N_Energies,nAlts), stat=iErr)
-        allocate(Fang_f(ED_N_Energies,nAlts), stat=iErr)
-
-        ! Ions
-        if (UseIonPrecipitation) then
-           allocate(Fang_Ion_Ci(ED_N_Energies,12), stat=iErr)
-           allocate(Fang_Ion_y(ED_N_Energies,nAlts), stat=iErr)
-           allocate(Fang_Ion_f(ED_N_Energies,nAlts), stat=iErr)
-        endif
-        
-        if (iErr /= 0) then
-           call stop_gitm("Error allocating Fang arrays in aurora")
-        endif
-
-        ! Electrons
-        do iEnergy = 1, ED_N_Energies
-           do i=1,8
-              Fang_Ci(iEnergy,i) = 0.0
-              do j=0,3
-                 Fang_Ci(iEnergy,i) = Fang_Ci(iEnergy,i) + &
-                      Fang_Pij(i,j+1) * log(ED_Energies(iEnergy)/1000.0)**j
-              enddo
-           enddo
-        enddo
-        Fang_Ci = exp(Fang_Ci)
-
-        ! Ions
-        if (UseIonPrecipitation) then
+     ! JMB BEGIN ISFIRSTTIME
+     if (IsFirstTime(iBlock)) then
+        ! JMB BEGIN FANG
+        if (UseFangEnergyDeposition) then
+           ! Electrons
+           allocate(Fang_Ci(ED_N_Energies,8), stat=iErr)
+           allocate(Fang_y(ED_N_Energies,nAlts), stat=iErr)
+           allocate(Fang_f(ED_N_Energies,nAlts), stat=iErr)
+           ! Ions
+           if (UseIonPrecipitation) then
+              allocate(Fang_Ion_Ci(ED_N_Energies,12), stat=iErr)
+              allocate(Fang_Ion_y(ED_N_Energies,nAlts), stat=iErr)
+              allocate(Fang_Ion_f(ED_N_Energies,nAlts), stat=iErr)
+           endif
+           if (iErr /= 0) then
+              call stop_gitm("Error allocating Fang arrays in aurora")
+           endif
+           ! Electrons
            do iEnergy = 1, ED_N_Energies
-              do i=1,12
-                 Fang_Ion_Ci(iEnergy,i) = 0.0
+              do i=1,8
+                 Fang_Ci(iEnergy,i) = 0.0
                  do j=0,3
-                    Fang_Ion_Ci(iEnergy,i) = Fang_Ion_Ci(iEnergy,i) + &
-                         Fang_Ion_Pij(i,j+1) * log(ED_Energies(iEnergy)/1000.0)**j
+                    Fang_Ci(iEnergy,i) = Fang_Ci(iEnergy,i) + &
+                      Fang_Pij(i,j+1) * log(ED_Energies(iEnergy)/1000.0)**j
                  enddo
               enddo
            enddo
-           Fang_Ion_Ci = exp(Fang_Ion_Ci)
-        endif
-        
+           Fang_Ci = exp(Fang_Ci)
+           ! Ions
+           if (UseIonPrecipitation) then
+              do iEnergy = 1, ED_N_Energies
+                 do i=1,12
+                    Fang_Ion_Ci(iEnergy,i) = 0.0
+                    do j=0,3
+                       Fang_Ion_Ci(iEnergy,i) = Fang_Ion_Ci(iEnergy,i) + &
+                            Fang_Ion_Pij(i,j+1) * log(ED_Energies(iEnergy)/1000.0)**j
+                    enddo
+                 enddo
+              enddo
+              Fang_Ion_Ci = exp(Fang_Ion_Ci)
+           endif !JMB: IONPRECIP
+        endif !(UseFangEnergyDeposition) then
+        ! JMB END FANG
+        ! JMB: Begin Update of Auroral Heating/IonRates
+        ! JMB: Set CurrentTime to CurrentTime + DtPotential 
+        ! JMB: Store the Actualtime as LastPotentialTime
+        ! If this is the first time, then don't alter time
+        LastAuroraIonHeatTime = CurrentTime  ! real(iReal8_) type
+        tSimNextAuroraIonHeat = tSimulation  ! default real type
+        ! No need to update CurrentTime
+
+     else! Not First Time
+        ! It is time to update potential, but is not the first time
+        ! Store current time
+        LastAuroraIonHeatTime = CurrentTime 
+        ! Increment the time forward by DtAuroraIonHeat for calcs
+                  CurrentTime = CurrentTime + DtAurora
+        tSimNextAuroraIonHeat = tSimulation + DtAurora
+
+     endif !(IsFirstTime(iBlock)) then
+     ! JMB END ISFIRSTTIME
+
+     AuroralBulkIonRate               = 0.0
+
+     call report("Aurora",1)
+     call start_timing("Aurora")
+
+     PreviousAuroralIonRateS(:,:,:,:,iBlock) = &
+             AuroralIonRateS(:,:,:,:,iBlock) 
+     PreviousAuroralHeatingRate(:,:,:,iBlock) = &
+             AuroralHeatingRate(:,:,:,iBlock) 
+
+     if (iBlock == 1) then
+        HemisphericPowerNorth = 0.0
+        HemisphericPowerSouth = 0.0
      endif
 
-  else
-     if (floor((tSimulation - dT)/dTAurora) == &
-          floor(tSimulation/dTAurora)) return
-  endif
+     ! Let's scale our hemispheric power so it is roughly the same as what
+     ! is measured.
 
-  AuroralBulkIonRate               = 0.0
-  AuroralHeatingRate(:,:,:,iBlock) = 0.0
-  AuroralIonRateS = 0.0
+     if (NormalizeAuroraToHP) then
+     
+        do i=1,nLats
+           do j=1,nLons
 
-  call report("Aurora",1)
-  call start_timing("Aurora")
+              eflx_ergs = ElectronEnergyFlux(j,i) !/ (1.0e-7 * 100.0 * 100.0)
 
-  if (iBlock == 1) then
-     HemisphericPowerNorth = 0.0
-     HemisphericPowerSouth = 0.0
-  endif
+              if (eflx_ergs > 0.1) then
+                 eflux = eflx_ergs * 6.242e11  ! ergs/cm2/s -> eV/cm2/s
 
-  ! Let's scale our hemispheric power so it is roughly the same as what
-  ! is measured.
+                 !(eV/cm2/s -> J/m2/s)
+                 power = eflux * Element_Charge*100.0*100.0 * & 
+                      dLatDist_FB(j, i, nAlts, iBlock) * &
+                      dLonDist_FB(j, i, nAlts, iBlock)
 
-  if (NormalizeAuroraToHP) then
+                 if (latitude(i,iBlock) < 0.0) then
+                    HemisphericPowerSouth = HemisphericPowerSouth + power
+                 else
+                    HemisphericPowerNorth = HemisphericPowerNorth + power
+                 endif
+
+              endif
+
+           enddo
+        enddo
+
+        ! Collect all of the powers by summing them together
+
+        LocalVar = HemisphericPowerNorth/1.0e9
+        call MPI_REDUCE(LocalVar, HPn, 1, MPI_REAL, MPI_SUM, &
+             0, iCommGITM, iError)
+
+        LocalVar = HemisphericPowerSouth/1.0e9
+        call MPI_REDUCE(LocalVar, HPs, 1, MPI_REAL, MPI_SUM, &
+             0, iCommGITM, iError)
+
+        ! Average north and south together
+
+        avepower = (HPn+HPs)/2.0
+
+        ! If we are only have one hemisphere or the other, assign to avepower
+        if (HPs < 0.1*HPn) avepower = HPn
+        if (HPn < 0.1*HPs) avepower = HPs
+
+        call MPI_Bcast(avepower,1,MPI_Real,0,iCommGITM,ierror)
+
+        call get_hpi(CurrentTime,Hpi,iError)
+        ratio = Hpi/avepower
+
+        if (iDebugLevel >= 0) then
+           if ((iDebugLevel == 0) .and. IsFirstTime(iBlock)) then
+              write(*,*) '---------------------------------------------------'
+              write(*,*) 'Using auroral normalizing ratios!!! '
+              write(*,*) 'no longer reporting!'
+              write(*,*) '---------------------------------------------------'
+           else
+              if (iDebugLevel >= 1) &
+                 write(*,*) 'auroral normalizing ratio: ', Hpi, avepower, ratio
+           endif
+        endif
+        do i=1,nLats
+           do j=1,nLons
+              if (ElectronEnergyFlux(j,i)>0.1) then
+                 ElectronEnergyFlux(j,i) = ElectronEnergyFlux(j,i)*ratio
+              endif
+           enddo
+        enddo
+
+     endif
+
+     ! Reset the hemispheric power
+
+     if (iBlock == 1) then
+        HemisphericPowerNorth = 0.0
+        HemisphericPowerSouth = 0.0
+     endif
+
+     AveEFactor = 1.0
+     if (iProc == 0 .and. AveEFactor /= 1.0) then
+        write(*,*) "Auroral Experiments!!!!"
+        write(*,*) "AveEFactor : ", AveEFactor
+     endif
+     if (iProc == 0 .and. IsKappaAurora) then
+        write(*,*) "Auroral Experiments!!!!"
+        write(*,*) "kappa : ", AuroraKappa
+     endif
   
      do i=1,nLats
         do j=1,nLons
 
-           eflx_ergs = ElectronEnergyFlux(j,i) !/ (1.0e-7 * 100.0 * 100.0)
+           UserData2d(j,i,1,2:nUserOutputs,iBlock) = 0.0
+
+           eflx_ergs = ElectronEnergyFlux(j,i)
+           av_kev    = ElectronAverageEnergy(j,i)
+
+           if (UseIonPrecipitation) then
+              ion_eflx_ergs = IonEnergyFlux(j,i)
+              ion_av_kev = IonAverageEnergy(j,i)
+           else
+              ion_eflx_ergs = 0.001
+              ion_av_kev = 10.0
+           endif
+           
+           ! For diffuse auroral models
+
+           ED_Flux = 0.0
+           HasSomeAurora = .false.
 
            if (eflx_ergs > 0.1) then
+
+              UserData2d(j,i,1,2,iBlock) = av_kev
+              UserData2d(j,i,1,3,iBlock) = eflx_ergs
+
+              HasSomeAurora = .true.
+              avee = av_kev * 1000.0        ! keV -> eV
               eflux = eflx_ergs * 6.242e11  ! ergs/cm2/s -> eV/cm2/s
 
-              !(eV/cm2/s -> J/m2/s)
-              power = eflux * Element_Charge*100.0*100.0 * & 
+              ion_avee = ion_av_kev * 1000.0        ! keV -> eV
+              ion_eflux = ion_eflx_ergs * 6.242e11  ! ergs/cm2/s -> eV/cm2/s
+              
+              ! 100 * 100 is for (eV/cm2/s -> J/m2/s)
+              power = (eflux+ion_eflux) * Element_Charge*100.0*100.0 * &
                    dLatDist_FB(j, i, nAlts, iBlock) * &
                    dLonDist_FB(j, i, nAlts, iBlock)
 
@@ -158,410 +285,334 @@ subroutine aurora(iBlock)
                  HemisphericPowerNorth = HemisphericPowerNorth + power
               endif
 
-           endif
+              ! Looking at other papers (Fang et al., [2010]), a
+              ! Maxwellian is defined as:
+              ! DifferentialNumberFlux = Q0/2/E0**3 * E * exp(-E/E0),
+              ! where:
+              ! Q0 = Total Energy Flux
+              ! E0 = Characteristic Energy (0.5*avee)
+              ! E = mid-point of energy bin
+              !
 
-        enddo
-     enddo
+              Q0 = eflux
+              E0 = avee/2
+              a = Q0/2/E0**3
 
-     ! Collect all of the powers by summing them together
+              Q0i = ion_eflux
+              E0i = ion_avee/2
+              ai = Q0i/2/E0i**3
 
-     LocalVar = HemisphericPowerNorth/1.0e9
-     call MPI_REDUCE(LocalVar, HPn, 1, MPI_REAL, MPI_SUM, &
-          0, iCommGITM, iError)
+              do n=1,ED_N_Energies
 
-     LocalVar = HemisphericPowerSouth/1.0e9
-     call MPI_REDUCE(LocalVar, HPs, 1, MPI_REAL, MPI_SUM, &
-          0, iCommGITM, iError)
+                 if (IsKappaAurora) then
+                    ! This is a Kappa Function from Fang et al. [2010]:
+                    ED_Flux(n) = a * (AuroraKappa-1) * (AuroraKappa-2) / &
+                         (AuroraKappa**2) * &
+                         ed_energies(n) * &
+                         (1 + ed_energies(n) / (AuroraKappa * E0)) ** &
+                         (-AuroraKappa-1)
+                 else
+                    ! This is a Maxwellian from Fang et al. [2010]:
+                    ED_flux(n) = a * ed_energies(n) * exp(-ed_energies(n)/E0)
+                    ED_ion_flux(n) = ai * ed_energies(n) * exp(-ed_energies(n)/E0i)
+                 endif
 
-     ! Average north and south together
-
-     avepower = (HPn+HPs)/2.0
-
-     ! If we are only have one hemisphere or the other, assign to avepower
-     if (HPs < 0.1*HPn) avepower = HPn
-     if (HPn < 0.1*HPs) avepower = HPs
-
-     call MPI_Bcast(avepower,1,MPI_Real,0,iCommGITM,ierror)
-
-     call get_hpi(CurrentTime,Hpi,iError)
-     ratio = Hpi/avepower
-
-     if (iDebugLevel >= 0) then
-        if ((iDebugLevel == 0) .and. IsFirstTime(iBlock)) then
-           write(*,*) '---------------------------------------------------'
-           write(*,*) 'Using auroral normalizing ratios!!! '
-           write(*,*) 'no longer reporting!'
-           write(*,*) '---------------------------------------------------'
-        else
-           if (iDebugLevel >= 1) &
-              write(*,*) 'auroral normalizing ratio: ', Hpi, avepower, ratio
-        endif
-     endif
-     do i=1,nLats
-        do j=1,nLons
-           if (ElectronEnergyFlux(j,i)>0.1) then
-              ElectronEnergyFlux(j,i) = ElectronEnergyFlux(j,i)*ratio
-           endif
-        enddo
-     enddo
-
-  endif
-
-  ! Reset the hemispheric power
-
-  if (iBlock == 1) then
-     HemisphericPowerNorth = 0.0
-     HemisphericPowerSouth = 0.0
-  endif
-
-  AveEFactor = 1.0
-  if (iProc == 0 .and. AveEFactor /= 1.0) then
-     write(*,*) "Auroral Experiments!!!!"
-     write(*,*) "AveEFactor : ", AveEFactor
-  endif
-  if (iProc == 0 .and. IsKappaAurora) then
-     write(*,*) "Auroral Experiments!!!!"
-     write(*,*) "kappa : ", AuroraKappa
-  endif
-  
-  do i=1,nLats
-     do j=1,nLons
-
-        UserData2d(j,i,1,2:nUserOutputs,iBlock) = 0.0
-
-        eflx_ergs = ElectronEnergyFlux(j,i)
-        av_kev    = ElectronAverageEnergy(j,i)
-
-        if (UseIonPrecipitation) then
-           ion_eflx_ergs = IonEnergyFlux(j,i)
-           ion_av_kev = IonAverageEnergy(j,i)
-        else
-           ion_eflx_ergs = 0.001
-           ion_av_kev = 10.0
-        endif
-        
-        ! For diffuse auroral models
-
-        ED_Flux = 0.0
-        HasSomeAurora = .false.
-
-        if (eflx_ergs > 0.1) then
-
-           UserData2d(j,i,1,2,iBlock) = av_kev
-           UserData2d(j,i,1,3,iBlock) = eflx_ergs
-
-           HasSomeAurora = .true.
-           avee = av_kev * 1000.0        ! keV -> eV
-           eflux = eflx_ergs * 6.242e11  ! ergs/cm2/s -> eV/cm2/s
-
-           ion_avee = ion_av_kev * 1000.0        ! keV -> eV
-           ion_eflux = ion_eflx_ergs * 6.242e11  ! ergs/cm2/s -> eV/cm2/s
-           
-           ! 100 * 100 is for (eV/cm2/s -> J/m2/s)
-           power = (eflux+ion_eflux) * Element_Charge*100.0*100.0 * &
-                dLatDist_FB(j, i, nAlts, iBlock) * &
-                dLonDist_FB(j, i, nAlts, iBlock)
-
-           if (latitude(i,iBlock) < 0.0) then
-              HemisphericPowerSouth = HemisphericPowerSouth + power
-           else
-              HemisphericPowerNorth = HemisphericPowerNorth + power
-           endif
-
-           ! Looking at other papers (Fang et al., [2010]), a
-           ! Maxwellian is defined as:
-           ! DifferentialNumberFlux = Q0/2/E0**3 * E * exp(-E/E0),
-           ! where:
-           ! Q0 = Total Energy Flux
-           ! E0 = Characteristic Energy (0.5*avee)
-           ! E = mid-point of energy bin
-           !
-
-           Q0 = eflux
-           E0 = avee/2
-           a = Q0/2/E0**3
-
-           Q0i = ion_eflux
-           E0i = ion_avee/2
-           ai = Q0i/2/E0i**3
-
-           do n=1,ED_N_Energies
-
-              if (IsKappaAurora) then
-                 ! This is a Kappa Function from Fang et al. [2010]:
-                 ED_Flux(n) = a * (AuroraKappa-1) * (AuroraKappa-2) / &
-                      (AuroraKappa**2) * &
-                      ed_energies(n) * &
-                      (1 + ed_energies(n) / (AuroraKappa * E0)) ** &
-                      (-AuroraKappa-1)
-              else
-                 ! This is a Maxwellian from Fang et al. [2010]:
-                 ED_flux(n) = a * ed_energies(n) * exp(-ed_energies(n)/E0)
-                 ED_ion_flux(n) = ai * ed_energies(n) * exp(-ed_energies(n)/E0i)
-              endif
-
-              ED_EnergyFlux(n) = &
-                   ED_flux(n) * &
-                   ED_Energies(n) * &
-                   ED_delta_energy(n)
-              ED_Ion_EnergyFlux(n) = &
-                   ED_Ion_flux(n) * &
-                   ED_Energies(n) * &
-                   ED_delta_energy(n)
-              
-           enddo
-
-        endif
-
-        UseMono = .false.
-        if (UseNewellAurora .and. UseNewellMono    ) UseMono = .true.
-        if (UseOvationSME   .and. UseOvationSMEMono) UseMono = .true.
-
-        if ( UseMono .and. &
-             ElectronNumberFluxMono(j,i) > 1.0e4 .and. &
-             ElectronEnergyFluxMono(j, i) > 0.1) then
-
-           av_kev = ElectronEnergyFluxMono(j, i) / &
-                    ElectronNumberFluxMono(j, i) * 6.242e11 ! eV
-
-           power = ElectronNumberFluxMono(j, i) * &
-                Element_Charge * 100.0 * 100.0 * &    ! (eV/cm2/s -> J/m2/s)
-                dLatDist_FB(j, i, nAlts, iBlock) * &
-                dLonDist_FB(j, i, nAlts, iBlock)
-
-           if (latitude(i,iBlock) < 0.0) then
-              HemisphericPowerSouth = HemisphericPowerSouth + power
-           else
-              HemisphericPowerNorth = HemisphericPowerNorth + power
-           endif
-
-           UserData2d(j,i,1,4,iBlock) = av_kev / 1000.0
-           UserData2d(j,i,1,5,iBlock) = ElectronEnergyFluxMono(j, i)
-
-           ! Mono-Energetic goes into one bin only!
-           do n=2,ED_N_Energies-1
-              if (av_kev < ED_energies(n-1) .and. av_kev >= ED_energies(n)) then
-                 ED_flux(n) = ED_Flux(n) + &
-                      ElectronNumberFluxMono(j, i) / &
-                      (ED_Energies(n-1) - ED_Energies(n))
                  ED_EnergyFlux(n) = &
                       ED_flux(n) * &
                       ED_Energies(n) * &
                       ED_delta_energy(n)
-                 HasSomeAurora = .true.
-              endif
-           enddo
-
-        endif
-
-        UseWave = .false.
-        if (UseNewellAurora .and. UseNewellWave    ) UseWave = .true.
-        if (UseOvationSME   .and. UseOvationSMEWave) UseWave = .true.
-
-        if ( UseWave .and. &
-             ElectronNumberFluxWave(j,i) > 1.0e4 .and. &
-             ElectronEnergyFluxWave(j,i) > 0.1) then
-
-           av_kev = ElectronEnergyFluxWave(j, i) / &
-                    ElectronNumberFluxWave(j, i) * 6.242e11 ! eV
-
-           power = ElectronNumberFluxWave(j, i) * &
-                Element_Charge * 100.0 * 100.0 * &    ! (eV/cm2/s -> J/m2/s)
-                dLatDist_FB(j, i, nAlts, iBlock) * dLonDist_FB(j, i, nAlts, iBlock)
-
-           if (latitude(i,iBlock) < 0.0) then
-              HemisphericPowerSouth = HemisphericPowerSouth + power
-           else
-              HemisphericPowerNorth = HemisphericPowerNorth + power
-           endif
-
-           UserData2d(j,i,1,6,iBlock) = av_kev / 1000.0
-           UserData2d(j,i,1,7,iBlock) = ElectronEnergyFluxWave(j, i)
-
-           ! Waves goes into five bins only!
-           k = 0
-           do n=3,ED_N_Energies-3
-              if (av_kev < ED_energies(n-1) .and. av_kev >= ED_energies(n)) then
-                 k = n
-              endif
-           enddo
-           if (k > 3) then 
-              f1 = 1.0
-              f2 = 1.2
-              f3 = 1.3
-              f4 = f2
-              f5 = f1
-              de1 = ED_energies(k-3)-ED_energies(k-2)
-              de2 = ED_energies(k-2)-ED_energies(k-1)
-              de3 = ED_energies(k-1)-ED_energies(k)  
-              de4 = ED_energies(k)  -ED_energies(k+1)
-              de5 = ED_energies(k+1)-ED_energies(k+2)
-!              detotal = (de1+de2+de3+de4+de5) * (f1+f2+f3+f4+f5) / 5
-              detotal = (f1+f2+f3+f4+f5)
-              ED_flux(k-2) = ED_Flux(k-2)+f1*ElectronNumberFluxWave(j, i)/detotal/de1
-              ED_flux(k-1) = ED_Flux(k-1)+f2*ElectronNumberFluxWave(j, i)/detotal/de2
-              ED_flux(k  ) = ED_Flux(k  )+f3*ElectronNumberFluxWave(j, i)/detotal/de3
-              ED_flux(k+1) = ED_Flux(k+1)+f4*ElectronNumberFluxWave(j, i)/detotal/de4
-              ED_flux(k+2) = ED_Flux(k+2)+f5*ElectronNumberFluxWave(j, i)/detotal/de5
-!              ED_flux(k-2) = ED_Flux(k-2) + f1*ElectronNumberFluxWave(j, i) / detotal
-!              ED_flux(k-1) = ED_Flux(k-1) + f2*ElectronNumberFluxWave(j, i) / detotal
-!              ED_flux(k  ) = ED_Flux(k  ) + f3*ElectronNumberFluxWave(j, i) / detotal
-!              ED_flux(k+1) = ED_Flux(k+1) + f4*ElectronNumberFluxWave(j, i) / detotal
-!              ED_flux(k+2) = ED_Flux(k+2) + f5*ElectronNumberFluxWave(j, i) / detotal
-              do n = k-2, n+2
-                 ED_EnergyFlux(n) = ED_flux(n) * ED_Energies(n) * ED_delta_energy(n)
-              enddo
-              HasSomeAurora = .true.
-           endif
-
-        endif
-
-        if (HasSomeAurora) then
-
-           if (UseFangEnergyDeposition) then
-
-              BulkScaleHeight1d = &
-                      Temperature(j,i,1:nAlts,iBlock) &
-                      * TempUnit(j,i,1:nAlts) * Boltzmanns_Constant &
-                      / (-Gravity_GB(j,i,1:nAlts,iBlock) * &
-                      MeanMajorMass(j,i,1:nAlts))*100.0 ! Convert to cm
-              
-              do iEnergy = 1,ED_N_Energies
-
-                 ! /10.0 in this statement is for kg/m2 to g/cm2
-                 ! /1000.0 is conversion from eV to keV
-                 ! Fang doesn't include the dip angle, be we do.
-                 Fang_y(iEnergy,:) = 2.0 / (ED_Energies(iEnergy)/1000.0) * &
-                      (ColumnIntegralRho(j,i,1:nAlts) / 10.0 / 6e-6) ** 0.7
-                      !sinDipAngle(j,i,1:nAlts,iBlock) / 6e-6) ** 0.7
-
-                 Ci = Fang_Ci(iEnergy,:)
-                 Fang_f(iEnergy,:) = &
-                      Ci(1) * Fang_y(iEnergy,:) ** Ci(2) * &
-                      exp(-Ci(3) * Fang_y(iEnergy,:) ** Ci(4)) + &
-                      Ci(5) * Fang_y(iEnergy,:) ** Ci(6) * & 
-                      exp(-Ci(7) * Fang_y(iEnergy,:) ** Ci(8)) 
-
-                 ! Energy flux is in eV/cm2/s and Fang needs keV/cm2/s:
-                 fac = ED_energyflux(iEnergy)/1000.0 / &
-                      Fang_de / &
-                      BulkScaleHeight1d
-
-                 ! I think that the 1e6 is cm3 to m3
-                 AuroralBulkIonRate(j,i,1:nAlts) = &
-                      AuroralBulkIonRate(j,i,1:nAlts) + 1e6*Fang_f(iEnergy,:) * fac
-
-                 if (UseIonPrecipitation) then
-
-                    ! /10.0 in this statement is for kg/m2 to g/cm2
-                    ! /1000.0 is conversion from eV to keV
-                    Fang_Ion_y(iEnergy,:) = 7.5 / (ED_Energies(iEnergy)/1000.0) * &
-                         (ColumnIntegralRho(j,i,1:nAlts) / 10.0 / 1e-4) ** 0.9
-
-                    Ion_Ci = Fang_Ion_Ci(iEnergy,:)
-
-                    Fang_Ion_f(iEnergy,:) = &
-                         Ion_Ci(1) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(2) * &
-                         exp(-Ion_Ci(3) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(4)) + &
-                         Ion_Ci(5) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(6) * & 
-                         exp(-Ion_Ci(7) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(8)) + &
-                         Ion_Ci(9) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(10) * & 
-                         exp(-Ion_Ci(11) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(12)) 
-
-                    fac = ED_ion_energyflux(iEnergy)/1000.0 / &
-                         Fang_de / &
-                         BulkScaleHeight1d
-
-                    AuroralBulkIonRate(j,i,1:nAlts) = &
-                         AuroralBulkIonRate(j,i,1:nAlts) + 1e6*Fang_Ion_f(iEnergy,:) * fac
-                    
-                 endif
+                 ED_Ion_EnergyFlux(n) = &
+                      ED_Ion_flux(n) * &
+                      ED_Energies(n) * &
+                      ED_delta_energy(n)
                  
               enddo
 
-              AuroralHeatingRate(j,i,1:nAlts,iBlock) = 0.0
-              
-           else
+           endif
 
-              call R_ELEC_EDEP (ED_Flux, 15, ED_Energies, 3, ED_Ion, 7)
-              call R_ELEC_EDEP (ED_Flux, 15, ED_Energies, 3, ED_Heating, 11)
+           UseMono = .false.
+           if (UseNewellAurora .and. UseNewellMono    ) UseMono = .true.
+           if (UseOvationSME   .and. UseOvationSMEMono) UseMono = .true.
 
-              iED = 1
+           if ( UseMono .and. &
+                ElectronNumberFluxMono(j,i) > 1.0e4 .and. &
+                ElectronEnergyFluxMono(j, i) > 0.1) then
 
-              factor = 1.0
+              av_kev = ElectronEnergyFluxMono(j, i) / &
+                       ElectronNumberFluxMono(j, i) * 6.242e11 ! eV
 
-              do k = 1, nAlts
+              power = ElectronNumberFluxMono(j, i) * &
+                   Element_Charge * 100.0 * 100.0 * &    ! (eV/cm2/s -> J/m2/s)
+                   dLatDist_FB(j, i, nAlts, iBlock) * &
+                   dLonDist_FB(j, i, nAlts, iBlock)
 
-                 p = alog(Pressure(j,i,k,iBlock)*factor)
+              if (latitude(i,iBlock) < 0.0) then
+                 HemisphericPowerSouth = HemisphericPowerSouth + power
+              else
+                 HemisphericPowerNorth = HemisphericPowerNorth + power
+              endif
 
-                 IsDone = .false.
-                 IsTop = .false.
-                 do while (.not.IsDone)
-                    if (ED_grid(iED) >= p .and. ED_grid(iED+1) <= p) then
-                       IsDone = .true.
-                       ED_Interpolation_Index(k) = iED
-                       ED_Interpolation_Weight(k) = (ED_grid(iED) - p) /  &
-                            (ED_grid(iED) - ED_grid(iED+1))
-                    else
-                       if (iED == ED_N_Alts-1) then
-                          IsDone = .true.
-                          IsTop = .true.
-                       else
-                          iED = iED + 1
-                       endif
-                    endif
-                 enddo
+              UserData2d(j,i,1,4,iBlock) = av_kev / 1000.0
+              UserData2d(j,i,1,5,iBlock) = ElectronEnergyFluxMono(j, i)
 
-                 if (.not.IsTop) then
-                    n = ED_Interpolation_Index(k)
-                    AuroralBulkIonRate(j,i,k) = ED_Ion(n) - &
-                         (ED_Ion(n) - ED_Ion(n+1))*ED_Interpolation_Weight(k)
-                    AuroralHeatingRate(j,i,k,iBlock) = ED_Heating(n) - &
-                         (ED_Heating(n) - ED_Heating(n+1))*ED_Interpolation_Weight(k)
-                 else
-
-                    ! Decrease after top of model
-                    AuroralBulkIonRate(j,i,k) = ED_Ion(ED_N_Alts) * &
-                         factor*Pressure(j,i,k,iBlock) / exp(ED_grid(ED_N_Alts)) 
-                    AuroralHeatingRate(j,i,k,iBlock) = ED_Heating(ED_N_Alts) * &
-                         factor*Pressure(j,i,k,iBlock) / exp(ED_grid(ED_N_Alts))
-
+              ! Mono-Energetic goes into one bin only!
+              do n=2,ED_N_Energies-1
+                 if (av_kev < ED_energies(n-1) .and. av_kev >= ED_energies(n)) then
+                    ED_flux(n) = ED_Flux(n) + &
+                         ElectronNumberFluxMono(j, i) / &
+                         (ED_Energies(n-1) - ED_Energies(n))
+                    ED_EnergyFlux(n) = &
+                         ED_flux(n) * &
+                         ED_Energies(n) * &
+                         ED_delta_energy(n)
+                    HasSomeAurora = .true.
                  endif
-
               enddo
 
            endif
 
-        endif
+           UseWave = .false.
+           if (UseNewellAurora .and. UseNewellWave    ) UseWave = .true.
+           if (UseOvationSME   .and. UseOvationSMEWave) UseWave = .true.
 
+           if ( UseWave .and. &
+                ElectronNumberFluxWave(j,i) > 1.0e4 .and. &
+                ElectronEnergyFluxWave(j,i) > 0.1) then
+
+                 av_kev = ElectronEnergyFluxWave(j, i) / &
+                       ElectronNumberFluxWave(j, i) * 6.242e11 ! eV
+
+              power = ElectronNumberFluxWave(j, i) * &
+                   Element_Charge * 100.0 * 100.0 * &    ! (eV/cm2/s -> J/m2/s)
+                   dLatDist_FB(j, i, nAlts, iBlock) * dLonDist_FB(j, i, nAlts, iBlock)
+
+              if (latitude(i,iBlock) < 0.0) then
+                 HemisphericPowerSouth = HemisphericPowerSouth + power
+              else
+                 HemisphericPowerNorth = HemisphericPowerNorth + power
+              endif
+
+              UserData2d(j,i,1,6,iBlock) = av_kev / 1000.0
+              UserData2d(j,i,1,7,iBlock) = ElectronEnergyFluxWave(j, i)
+
+              ! Waves goes into five bins only!
+              k = 0
+              do n=3,ED_N_Energies-3
+                 if (av_kev < ED_energies(n-1) .and. av_kev >= ED_energies(n)) then
+                    k = n
+                 endif
+              enddo
+              if (k > 3) then 
+                 f1 = 1.0
+                 f2 = 1.2
+                 f3 = 1.3
+                 f4 = f2
+                 f5 = f1
+                 de1 = ED_energies(k-3)-ED_energies(k-2)
+                 de2 = ED_energies(k-2)-ED_energies(k-1)
+                 de3 = ED_energies(k-1)-ED_energies(k)  
+                 de4 = ED_energies(k)  -ED_energies(k+1)
+                 de5 = ED_energies(k+1)-ED_energies(k+2)
+                  detotal = (de1+de2+de3+de4+de5) * (f1+f2+f3+f4+f5) / 5
+                 detotal = (f1+f2+f3+f4+f5)
+                 ED_flux(k-2) = ED_Flux(k-2)+f1*ElectronNumberFluxWave(j, i)/detotal/de1
+                 ED_flux(k-1) = ED_Flux(k-1)+f2*ElectronNumberFluxWave(j, i)/detotal/de2
+                 ED_flux(k  ) = ED_Flux(k  )+f3*ElectronNumberFluxWave(j, i)/detotal/de3
+                 ED_flux(k+1) = ED_Flux(k+1)+f4*ElectronNumberFluxWave(j, i)/detotal/de4
+                 ED_flux(k+2) = ED_Flux(k+2)+f5*ElectronNumberFluxWave(j, i)/detotal/de5
+                  ED_flux(k-2) = ED_Flux(k-2) + f1*ElectronNumberFluxWave(j, i) / detotal
+                  ED_flux(k-1) = ED_Flux(k-1) + f2*ElectronNumberFluxWave(j, i) / detotal
+                  ED_flux(k  ) = ED_Flux(k  ) + f3*ElectronNumberFluxWave(j, i) / detotal
+                  ED_flux(k+1) = ED_Flux(k+1) + f4*ElectronNumberFluxWave(j, i) / detotal
+                  ED_flux(k+2) = ED_Flux(k+2) + f5*ElectronNumberFluxWave(j, i) / detotal
+                 do n = k-2, n+2
+                    ED_EnergyFlux(n) = ED_flux(n) * ED_Energies(n) * ED_delta_energy(n)
+                 enddo
+                 HasSomeAurora = .true.
+              endif
+
+           endif
+
+           if (HasSomeAurora) then
+
+              if (UseFangEnergyDeposition) then
+
+                 BulkScaleHeight1d = &
+                         Temperature(j,i,1:nAlts,iBlock) &
+                         * TempUnit(j,i,1:nAlts) * Boltzmanns_Constant &
+                         / (-Gravity_GB(j,i,1:nAlts,iBlock) * &
+                         MeanMajorMass(j,i,1:nAlts))*100.0 ! Convert to cm
+                 
+                 do iEnergy = 1,ED_N_Energies
+
+                    ! /10.0 in this statement is for kg/m2 to g/cm2
+                    ! /1000.0 is conversion from eV to keV
+                    ! Fang doesn't include the dip angle, be we do.
+                    Fang_y(iEnergy,:) = 2.0 / (ED_Energies(iEnergy)/1000.0) * &
+                         (ColumnIntegralRho(j,i,1:nAlts) / 10.0 / 6e-6) ** 0.7
+                         !sinDipAngle(j,i,1:nAlts,iBlock) / 6e-6) ** 0.7
+
+                    Ci = Fang_Ci(iEnergy,:)
+                    Fang_f(iEnergy,:) = &
+                         Ci(1) * Fang_y(iEnergy,:) ** Ci(2) * &
+                         exp(-Ci(3) * Fang_y(iEnergy,:) ** Ci(4)) + &
+                         Ci(5) * Fang_y(iEnergy,:) ** Ci(6) * & 
+                         exp(-Ci(7) * Fang_y(iEnergy,:) ** Ci(8)) 
+
+                    ! Energy flux is in eV/cm2/s and Fang needs keV/cm2/s:
+                    fac = ED_energyflux(iEnergy)/1000.0 / &
+                         Fang_de / &
+                         BulkScaleHeight1d
+
+                    ! I think that the 1e6 is cm3 to m3
+                    AuroralBulkIonRate(j,i,1:nAlts) = &
+                         AuroralBulkIonRate(j,i,1:nAlts) + 1e6*Fang_f(iEnergy,:) * fac
+
+                    if (UseIonPrecipitation) then
+
+                       ! /10.0 in this statement is for kg/m2 to g/cm2
+                       ! /1000.0 is conversion from eV to keV
+                       Fang_Ion_y(iEnergy,:) = 7.5 / (ED_Energies(iEnergy)/1000.0) * &
+                            (ColumnIntegralRho(j,i,1:nAlts) / 10.0 / 1e-4) ** 0.9
+
+                       Ion_Ci = Fang_Ion_Ci(iEnergy,:)
+
+                       Fang_Ion_f(iEnergy,:) = &
+                            Ion_Ci(1) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(2) * &
+                            exp(-Ion_Ci(3) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(4)) + &
+                            Ion_Ci(5) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(6) * & 
+                            exp(-Ion_Ci(7) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(8)) + &
+                            Ion_Ci(9) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(10) * & 
+                            exp(-Ion_Ci(11) * Fang_Ion_y(iEnergy,:) ** Ion_Ci(12)) 
+
+                       fac = ED_ion_energyflux(iEnergy)/1000.0 / &
+                            Fang_de / &
+                            BulkScaleHeight1d
+
+                       AuroralBulkIonRate(j,i,1:nAlts) = &
+                            AuroralBulkIonRate(j,i,1:nAlts) + 1e6*Fang_Ion_f(iEnergy,:) * fac
+                       
+                    endif
+                    
+                 enddo
+
+                 AuroralHeatingRate(j,i,1:nAlts,iBlock) = 0.0
+                
+              else
+
+                 call R_ELEC_EDEP (ED_Flux, 15, ED_Energies, 3, ED_Ion, 7)
+                 call R_ELEC_EDEP (ED_Flux, 15, ED_Energies, 3, ED_Heating, 11)
+
+                 iED = 1
+
+                 factor = 1.0
+
+                 do k = 1, nAlts
+
+                    p = alog(Pressure(j,i,k,iBlock)*factor)
+
+                    IsDone = .false.
+                    IsTop = .false.
+                    do while (.not.IsDone)
+                       if (ED_grid(iED) >= p .and. ED_grid(iED+1) <= p) then
+                          IsDone = .true.
+                          ED_Interpolation_Index(k) = iED
+                          ED_Interpolation_Weight(k) = (ED_grid(iED) - p) /  &
+                               (ED_grid(iED) - ED_grid(iED+1))
+                       else
+                          if (iED == ED_N_Alts-1) then
+                             IsDone = .true.
+                             IsTop = .true.
+                          else
+                             iED = iED + 1
+                          endif
+                       endif
+                    enddo
+
+                    if (.not.IsTop) then
+                       n = ED_Interpolation_Index(k)
+                       AuroralBulkIonRate(j,i,k) = ED_Ion(n) - &
+                            (ED_Ion(n) - ED_Ion(n+1))*ED_Interpolation_Weight(k)
+                       AuroralHeatingRate(j,i,k,iBlock) = ED_Heating(n) - &
+                            (ED_Heating(n) - ED_Heating(n+1))*ED_Interpolation_Weight(k)
+                    else
+
+                       ! Decrease after top of model
+                       AuroralBulkIonRate(j,i,k) = ED_Ion(ED_N_Alts) * &
+                            factor*Pressure(j,i,k,iBlock) / exp(ED_grid(ED_N_Alts)) 
+                       AuroralHeatingRate(j,i,k,iBlock) = ED_Heating(ED_N_Alts) * &
+                            factor*Pressure(j,i,k,iBlock) / exp(ED_grid(ED_N_Alts))
+
+                    endif
+
+                 enddo
+
+              endif
+
+           endif
+
+        enddo
      enddo
-  enddo
 
-  ! From Rees's book:
+     ! From Rees's book:
 
-  temp = 0.92 * NDensityS(1:nLons,1:nLats,1:nAlts,iN2_,iBlock) + &
-         1.00 * NDensityS(1:nLons,1:nLats,1:nAlts,iO2_,iBlock) + &
-         0.56 * NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock)
+     temp = 0.92 * NDensityS(1:nLons,1:nLats,1:nAlts,iN2_,iBlock) + &
+            1.00 * NDensityS(1:nLons,1:nLats,1:nAlts,iO2_,iBlock) + &
+            0.56 * NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock)
 
-  AuroralIonRateS(:,:,:,iO_3P_,iBlock)  = &
-       0.56*AuroralBulkIonRate*&
-       NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock)/temp
-  AuroralIonRateS(:,:,:,iO2_,iBlock) = &
-       1.00*AuroralBulkIonRate*&
-       NDensityS(1:nLons,1:nLats,1:nAlts,iO2_,iBlock)/temp
-  AuroralIonRateS(:,:,:,iN2_,iBlock) = &
-       0.92*AuroralBulkIonRate*&
-       NDensityS(1:nLons,1:nLats,1:nAlts,iN2_,iBlock)/temp
+     AuroralIonRateS(:,:,:,iO_3P_,iBlock)  = &
+          0.56*AuroralBulkIonRate*&
+          NDensityS(1:nLons,1:nLats,1:nAlts,iO_3P_,iBlock)/temp
+     AuroralIonRateS(:,:,:,iO2_,iBlock) = &
+          1.00*AuroralBulkIonRate*&
+          NDensityS(1:nLons,1:nLats,1:nAlts,iO2_,iBlock)/temp
+     AuroralIonRateS(:,:,:,iN2_,iBlock) = &
+          0.92*AuroralBulkIonRate*&
+          NDensityS(1:nLons,1:nLats,1:nAlts,iN2_,iBlock)/temp
 
+        NextAuroralIonRateS(:,:,:,:,iBlock) =      AuroralIonRates(:,:,:,:,iBlock)
+     NextAuroralHeatingRate(:,:,:,  iBlock) =   AuroralHeatingRate(:,:,:,  iBlock) 
+
+!     FrozenTempUnit(:,:,:,iBlock) = TempUnit(1:nLons,1:nLats,1:nAlts)
+!           FrozenCp(:,:,:,iBlock) =  cp(1:nLons,1:nLats,1:nAlts,iBlock)
+!          FrozenRho(:,:,:,iBlock) = Rho(1:nLons,1:nLats,1:nAlts,iBlock)
+
+  endif !(floor((tSimulation-Dt)/DtAurora) /= &
+  ! END DTCHECK
+
+  if(IsFirstTime(iBlock)) then
+     PreviousAuroralIonRateS(:,:,:,:,iBlock) = &  
+         NextAuroralIonRateS(:,:,:,:,iBlock) 
+     PreviousAuroralHeatingRate(:,:,:,iBlock) = &  
+         NextAuroralHeatingRate(:,:,:,iBlock) 
+
+     IsFirstTime(iBlock) = .false.
+  else
+     AuroralIonRateS(:,:,:,:,iBlock)   = &
+         NextAuroralIonRateS(:,:,:,:,iBlock)  - &
+     (   NextAuroralIonRateS(:,:,:,:,iBlock)  - &
+     PreviousAuroralIonRateS(:,:,:,:,iBlock) )*& 
+                (tSimNextAuroraIonHeat - tSimulation)/DtAurora
+
+     AuroralHeatingRate(:,:,:,iBlock)   = &
+         NextAuroralHeatingRate(:,:,:,iBlock)  - &
+     (   NextAuroralHeatingRate(:,:,:,iBlock)  - &
+     PreviousAuroralHeatingRate(:,:,:,iBlock) )*& 
+                (tSimNextAuroraIonHeat - tSimulation)/DtAurora
+
+  endif!(IsFirstTime(iBlock)) then
+
+  ! Next, we scale the heating rate with TempUnit
   if (UseAuroralHeating) then
-     AuroralHeating = AuroralHeatingRate(:,:,:,iBlock) / &
-          TempUnit(1:nLons,1:nLats,1:nAlts) / cp(:,:,1:nAlts,iBlock) / &
-          rho(1:nLons,1:nLats,1:nAlts, iBlock)
+     AuroralHeating = NextAuroralHeatingRate(:,:,:,iBlock) / &
+          TempUnit(1:nLons,1:nLats,1:nAlts) / &
+          Cp(:,:,1:nAlts,iBlock) / &
+          Rho(1:nLons,1:nLats,1:nAlts, iBlock)
   else
      AuroralHeating = 0.0
   endif
 
-  IsFirstTime(iBlock) = .false.
+
 
   call end_timing("Aurora")
 

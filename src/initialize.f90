@@ -505,6 +505,7 @@ subroutine initialize_gitm(TimeIn)
      call init_mesh_lons(iBlock)
      call init_mesh_alts(iBlock)
   enddo 
+
   ! Initialize The Electrodynamics Variables
   call init_electrodynamics
   do iBlock = 1, nBlocks

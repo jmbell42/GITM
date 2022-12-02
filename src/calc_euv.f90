@@ -11,6 +11,7 @@ subroutine euv_ionization_heat(iBlock)
   use ModSources
   use ModTime, only : tSimulation, CurrentTime
   use ModIndicesInterfaces
+  use ModSmoothDrivers
 
   implicit none
 
@@ -21,139 +22,207 @@ subroutine euv_ionization_heat(iBlock)
   real, dimension(nLons,nLats) :: Tau, Intensity
 
   logical :: IsFirstTime(nBlocksMax) = .true.
-
   real :: NeutralDensity(nLons, nLats, nSpeciesTotal)
   real :: ChapmanLittle(nLons, nLats, nSpecies)
   real :: EHeat(nLons, nLats)
   real :: nEuvHeating(nLons,nLats,nAlts), neEuvHeating(nLons,nLats,nAlts)
+  real :: EuvHeatingRate(nLons,nLats,nAlts)
 
-  if (IsFirstTime(iBlock)) then
 
-     IsFirstTime(iBlock) = .false.
+  ! Use our DtCheck
+  if (floor((tSimulation-Dt)/DtAurora) /= &
+      floor( tSimulation    /DtAurora) .or. IsFirstTime(iBlock)) then
 
-     ! This transfers the specific photo absorption and ionization cross
-     ! sections into general variables, so we can use loops...
+     call report("euv_ionization_heat",2)
+     call start_timing("euv_ionization_heat")
 
-     call fill_photo
-
-  else
-     if (floor((tSimulation - dT)/dTAurora) == &
-          floor(tSimulation/dTAurora)) return
-  endif
-
-  call report("euv_ionization_heat",2)
-  call start_timing("euv_ionization_heat")
-  call chapman_integrals(iBlock)
-
-  EuvIonRate = 0.0
-  EuvHeating(:,:,:,iBlock)= 0.0
-  PhotoElectronHeating(:,:,:,iBlock)= 0.0
-  eEuvHeating(:,:,:,iBlock) = 0.0
-  EuvIonRateS(:,:,:,:,iBlock) = 0.0 
-  EuvDissRateS(:,:,:,:,iBlock) = 0.0
-  nEuvHeating(:,:,:) = 0.0
-  neEuvHeating(:,:,:) = 0.0
-
-  do iAlt = 1, nAlts
-
-     NeutralDensity = NDensityS(1:nLons,1:nLats,iAlt,1:nSpeciesTotal,iBlock)
-     ChapmanLittle  = Chapman(:,:,iAlt,1:nSpecies,iBlock)
-     EHeat = 0.0
-
-     do iWave = 1, Num_WaveLengths_High
-
-        Tau = 0.0
-        do iSpecies = 1, nSpecies
-           Tau = Tau + &
-                photoabs(iWave, iSpecies) * ChapmanLittle(:,:,iSpecies)
-        enddo
-
-        Intensity = Flux_of_EUV(iWave) * exp(-1.0*Tau)
-
-        do iIon = 1, nIons-1
-           iNeutral = PhotoIonFrom(iIon)
-           ! If we have an ionization cross section, use it with the
-           ! appropriate neutral density, otherwise, there is no ionization
-           if (iNeutral > 0) then
-              EuvIonRateS(:,:,iAlt,iIon,iBlock) = &
-                   EuvIonRateS(:,:,iAlt,iIon,iBlock) + &
-                   Intensity * PhotoIon(iWave,iIon) * &
-                   NeutralDensity(:,:,iNeutral) * &
-                   (1.0 + PhotoElecIon(iWave,iIon))
-           else
-              EuvIonRateS(:,:,iAlt,iIon,iBlock) = 0.0
-           endif
-        enddo
-
-        do iSpecies = 1, nSpecies
-           EuvDissRateS(:,:,iAlt,iSpecies,iBlock) = &
-                EuvDissRateS(:,:,iAlt,iSpecies,iBlock) + &
-                Intensity*PhotoDis(iWave,iSpecies) * &
-                NeutralDensity(:,:,iSpecies) * &
-                (1.0 + PhotoElecDiss(iWave,iSpecies))
-        enddo
-
-        do iSpecies = 1, nSpecies
-           EHeat = EHeat + &
-                Intensity*PhotonEnergy(iWave)* &
-                photoabs(iWave, iSpecies) * NeutralDensity(:,:,iSpecies)
-        enddo
-
-     enddo
-
-     EuvHeating(:,:,iAlt,iBlock)  = EHeat*HeatingEfficiency_CB(:,:,iAlt,iBlock)
-     eEuvHeating(:,:,iAlt,iBlock) = EHeat*eHeatingEfficiency_CB(:,:,iAlt,iBlock)
-
-     ! Why this? Is this for Mars or Venus or something?
-     !do ilon = 1, nlons 
-     !   do ilat =1 ,nlats
-     !      if (Altitude_GB(iLon,iLat,iAlt,iBlock) .lt. 80000.0) then
-     !         EUVHeating(iLon,iLat,iAlt,iBlock) =0.0
-     !         eEUVHeating(iLon,iLat,iAlt,iBlock) =0.0
-     !      endif
-     !   enddo
-     !enddo
+     ! Set our Timing Here
+     if(IsFirstTime(iBlock)) then
+           LastEuvTime = CurrentTime  ! real(iReal8_) type
+           tSimNextEuv = tSimulation  ! default real type
+        tSimCurrentEuv = tSimulation  ! default real type
+        ! No need to update CurrentTime
+     else! Not First Time
+        ! It is time to update potential, but is not the first time
+        ! Store current time
+           LastEuvTime = CurrentTime 
+        ! Increment the time forward by DtEuv for calcs
+           CurrentTime = CurrentTime + DtAurora
+           tSimNextEuv = tSimulation + DtAurora
+     endif !(IsFirstTime(iBlock)) then
+     ! JMB END ISFIRSTTIME
      
-  enddo
-  
-  if (IncludeEclipse) call calc_eclipse_effects
-  if (IsEarth) call night_euv_ionization
+     ! Calculate the Forward Step in time
+     call      calc_physics(iBlock)
+     call chapman_integrals(iBlock)
 
-  EuvIonRateS = EuvIonRateS + nEuvIonRateS
-  EuvHeating(:,:,:,iBlock) = EuvHeating(:,:,1:nAlts,iBlock) + nEuvHeating
-  eEuvHeating(:,:,:,iBlock) = eEuvHeating(:,:,1:nAlts,iBlock) + neEuvHeating
+         PreviousEuvIonRateS(:,:,:,:,iBlock) = &
+                 EuvIonRateS(:,:,:,:,iBlock) 
+        PreviousEuvDissRateS(:,:,:,:,iBlock) = &
+                EuvDissRateS(:,:,:,:,iBlock) 
+         PreviousEuvHeatingRate(:,:,:,iBlock) = &
+           NextEuvHeatingRate(:,:,:,iBlock) 
+         PreviouseEuvHeatingRate(:,:,:,iBlock) = &
+           NexteEuvHeatingRate(:,:,:,iBlock) 
 
-  !\
-  ! Zero out EuvHeating if specified not to use it.
-  !/
+     EuvIonRate = 0.0
+     EuvHeating(:,:,:,iBlock)= 0.0
+     eEuvHeating(:,:,:,iBlock) = 0.0
+     EuvIonRateS(:,:,:,:,iBlock) = 0.0 
+     EuvDissRateS(:,:,:,:,iBlock) = 0.0
+     nEuvHeating(:,:,:) = 0.0 ! Used locally only
+     neEuvHeating(:,:,:) = 0.0 ! Used locally only
 
-  if (UseSolarHeating) then
-
-     EuvHeating2d = 0.0
-
+     ! Need to Store key variables
      do iAlt = 1, nAlts
+        NeutralDensity = NDensityS(1:nLons,1:nLats,iAlt,1:nSpeciesTotal,iBlock)
+        ChapmanLittle  = Chapman(:,:,iAlt,1:nSpecies,iBlock)
+        EHeat = 0.0
+        do iWave = 1, Num_WaveLengths_High
+           Tau = 0.0
+           do iSpecies = 1, nSpecies
+              Tau = Tau + &
+                   photoabs(iWave, iSpecies) * ChapmanLittle(:,:,iSpecies)
+           enddo
+           Intensity = Flux_of_EUV(iWave) * exp(-1.0*Tau)
+           do iIon = 1, nIons-1
+              iNeutral = PhotoIonFrom(iIon)
+              ! If we have an ionization cross section, use it with the
+              ! appropriate neutral density, otherwise, there is no ionization
+              if (iNeutral > 0) then
+                 EuvIonRateS(:,:,iAlt,iIon,iBlock) = &
+                      EuvIonRateS(:,:,iAlt,iIon,iBlock) + &
+                      Intensity * PhotoIon(iWave,iIon) * &
+                      NeutralDensity(:,:,iNeutral) * &
+                      (1.0 + PhotoElecIon(iWave,iIon))
+              else
+                 EuvIonRateS(:,:,iAlt,iIon,iBlock) = 0.0
+              endif
+           enddo
+           do iSpecies = 1, nSpecies
+              EuvDissRateS(:,:,iAlt,iSpecies,iBlock) = &
+                   EuvDissRateS(:,:,iAlt,iSpecies,iBlock) + &
+                   Intensity*PhotoDis(iWave,iSpecies) * &
+                   NeutralDensity(:,:,iSpecies) * &
+                   (1.0 + PhotoElecDiss(iWave,iSpecies))
+           enddo
+           do iSpecies = 1, nSpecies
+              EHeat = EHeat + &
+                   Intensity*PhotonEnergy(iWave)* &
+                   photoabs(iWave, iSpecies) * NeutralDensity(:,:,iSpecies)
+           enddo
+        enddo
 
-        EuvHeating2d(1:nLons,1:nLats) = &
-             EuvHeating2d(1:nLons,1:nLats) + &
-             EuvHeating(:,:,iAlt,iBlock)  * &
-             dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
-        
-        EuvHeating(:,:,iAlt,iBlock) = EuvHeating(:,:,iAlt,iBlock) / &
-             Rho(1:nLons,1:nLats,iAlt,iBlock) / &
-             cp(1:nLons,1:nLats,iAlt,iBlock) / &
-             TempUnit(1:nLons,1:nLats,iAlt)
+        ! Scale total heating by efficiency
+         EuvHeating(:,:,iAlt,iBlock)  = EHeat* HeatingEfficiency_CB(:,:,iAlt,iBlock)
+        eEuvHeating(:,:,iAlt,iBlock)  = EHeat*eHeatingEfficiency_CB(:,:,iAlt,iBlock)
 
-        EuvTotal(:,:,iAlt,iBlock) = EuvHeating(:,:,iAlt,iBlock) * &
-             TempUnit(1:nLons,1:nLats,iAlt) / &
-             HeatingEfficiency_CB(:,:,iAlt,iBlock)
+     enddo ! End iAlt Loop
+     
+     if (IncludeEclipse) call calc_eclipse_effects
+     if (IsEarth) call night_euv_ionization
+     ! Add the nighside contribution
+     EuvIonRateS = EuvIonRateS + nEuvIonRateS
+      EuvHeating(:,:,:,iBlock) =  EuvHeating(:,:,1:nAlts,iBlock) + nEuvHeating
+     eEuvHeating(:,:,:,iBlock) = eEuvHeating(:,:,1:nAlts,iBlock) + neEuvHeating
+!
+     ! Store Final Calculations
+     NextEuvIonRateS( :,:,:,:,iBlock) = EuvIonRateS( :,:,:,:,iBlock) 
+     NextEuvDissRateS(:,:,:,:,iBlock) = EuvDissRateS(:,:,:,:,iBlock)
+     NextEuvHeatingRate( :,:,:,iBlock) = EuvHeating( :,:,:,iBlock) 
+     NexteEuvHeatingRate(:,:,:,iBlock) = eEuvHeating(:,:,:,iBlock)
 
-     enddo
+     if(IsFirstTime(iBlock)) then
+       ! Don't do anything
+     else
+       CurrentTime = LastEuvTime 
+     endif
 
-  else
-     EuvHeating = 0.0
-  endif
+     ! JMB END
+     ! Calculate the StepBack in time
+      call calc_physics(iBlock)
+  endif ! DT CHECK
+
+
+  ! Interpolate to our current time
+  if(IsFirstTime(iBlock)) then
+     ! Store the previous "new" values
+     ! as our new "old" values -- i.e. the hand off
+      PreviousEuvIonRateS(:,:,:,:,iBlock) = &
+          NextEuvIonRateS(:,:,:,:,iBlock) 
+      PreviousEuvDissRateS(:,:,:,:,iBlock) = &
+          NextEuvDissRateS(:,:,:,:,iBlock) 
+      PreviousEuvHeatingRate(:,:,:,iBlock) = &
+          NextEuvHeatingRate(:,:,:,iBlock) 
+      PreviouseEuvHeatingRate(:,:,:,iBlock) = &
+          NexteEuvHeatingRate(:,:,:,iBlock) 
+
+      EuvIonRateS(:,:,:,:,iBlock) = &
+          NextEuvIonRateS(:,:,:,:,iBlock) 
+      EuvDissRateS(:,:,:,:,iBlock) = &
+          NextEuvDissRateS(:,:,:,:,iBlock) 
+      eEuvHeating(:,:,:,iBlock) = &
+          NexteEuvHeatingRate(:,:,:,iBlock) 
+      EuvHeatingRate(:,:,:) = &
+          NextEuvHeatingRate(:,:,:,iBlock) 
+
+      IsFirstTime(iBlock) = .false.
+   else
+     EuvIonRateS(1:nLons,1:nLats,1:nAlts,1:nIons-1,iBlock)   = &
+         NextEuvIonRateS(1:nLons,1:nLats,1:nAlts,1:nIons-1,iBlock)  - &
+     (   NextEuvIonRateS(1:nLons,1:nLats,1:nAlts,1:nIons-1,iBlock)  - &
+     PreviousEuvIonRateS(1:nLons,1:nLats,1:nAlts,1:nIons-1,iBlock))*&
+                (tSimNextEuv - tSimulation)/DtAurora
+
+     EuvDissRateS(1:nLons,1:nLats,1:nAlts,1:nSpeciesTotal,iBlock)   = &
+         NextEuvDissRateS(1:nLons,1:nLats,1:nAlts,1:nSpeciesTotal,iBlock) - &
+     (    NextEuvDissRateS(1:nLons,1:nLats,1:nAlts,1:nSpeciesTotal,iBlock) - &
+      PreviousEuvDissRateS(1:nLons,1:nLats,1:nAlts,1:nSpeciesTotal,iBlock) )* &
+                (tSimNextEuv - tSimulation)/DtAurora
+
+     eEuvHeating(1:nLons,1:nLats,1:nAlts,iBlock)   = &
+         NexteEuvHeatingRate(1:nLons,1:nLats,1:nAlts,iBlock)  - &
+     (   NexteEuvHeatingRate(1:nLons,1:nLats,1:nAlts,iBlock)  - &
+     PreviouseEuvHeatingRate(1:nLons,1:nLats,1:nAlts,iBlock))*&
+                (tSimNextEuv - tSimulation)/DtAurora
+
+     EuvHeatingRate(1:nLons,1:nLats,1:nAlts)   = &
+         NextEuvHeatingRate(1:nLons,1:nLats,1:nAlts,iBlock)  - &
+     (   NextEuvHeatingRate(1:nLons,1:nLats,1:nAlts,iBlock)  - &
+     PreviousEuvHeatingRate(1:nLons,1:nLats,1:nAlts,iBlock))*&
+                (tSimNextEuv - tSimulation)/DtAurora
+
+   endif
+
+   !\
+   ! Zero out EuvHeating if specified not to use it.
+   !/
+   if (UseSolarHeating) then
+      EuvHeating2d = 0.0
+      do iAlt = 1, nAlts
+         EuvHeating2d(1:nLons,1:nLats) = &
+              EuvHeating2d(1:nLons,1:nLats) + &
+              EuvHeating(:,:,iAlt,iBlock)  * &
+              dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
+         
+         EuvHeating(:,:,iAlt,iBlock) = NextEuvHeatingRate(:,:,iAlt,iBlock) / &
+              Rho(1:nLons,1:nLats,iAlt,iBlock) / &
+              cp(1:nLons,1:nLats,iAlt,iBlock) / &
+              TempUnit(1:nLons,1:nLats,iAlt)
+
+         EuvTotal(:,:,iAlt,iBlock) = EuvHeating(:,:,iAlt,iBlock) * &
+              TempUnit(1:nLons,1:nLats,iAlt) / &
+              HeatingEfficiency_CB(:,:,iAlt,iBlock)
+      enddo
+
+   else
+      EuvHeating = 0.0
+   endif
+
+  ! In all cases, we interpolate here
 
   call end_timing("euv_ionization_heat")
+
 
 contains 
 
