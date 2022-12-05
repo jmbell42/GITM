@@ -200,15 +200,10 @@ subroutine calc_chemistry(iBlock)
   endwhere
   
    tr3d = (iTemperature(1:nLons,1:nLats,1:nAlts,iBlock) &
-          + Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-          TempUnit(1:nLons,1:nLats,1:nAlts)) / 2.0
+          + Temperature(1:nLons,1:nLats,1:nAlts,iBlock)) / 2.0
 
-  tn3d = Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-                TempUnit(1:nLons,1:nLats,1:nAlts)
-				
-  ti3d = 	iTemperature(1:nLons,1:nLats,1:nAlts,iBlock)			
-		 
-		 
+  tn3d = Temperature(1:nLons,1:nLats,1:nAlts,iBlock)
+  ti3d = iTemperature(1:nLons,1:nLats,1:nAlts,iBlock)
   ti33d = ti3d/300.0
   ti103d = ti3d/1000.0
   ti93d = ti3d/900.0
@@ -287,8 +282,7 @@ subroutine calc_chemistry(iBlock)
                 exp(te227d(iLon,iLat,iAlt))
            tr3m08  = tr3m083d(iLon,iLat,iAlt)
            ti = iTemperature(iLon,iLat,iAlt,iBlock)
-           tn = Temperature(iLon,iLat,iAlt,iBlock)*&
-                TempUnit(iLon,iLat,iAlt)
+           tn = Temperature(iLon,iLat,iAlt,iBlock)
 
            tn1 = exp(107.8/tn)
            tn06 = exp(67.5/tn)
@@ -2388,9 +2382,9 @@ subroutine calc_chemistry(iBlock)
 
   ChemicalHeatingRate(:,:,:) = &
        ChemicalHeatingRate(:,:,:) * Element_Charge / &
-       TempUnit(1:nLons,1:nLats,1:nAlts) / cp(1:nLons,1:nLats,1:nAlts,iBlock)/&
+        cp(1:nLons,1:nLats,1:nAlts,iBlock)/&
        rho(1:nLons,1:nLats,1:nAlts,iBlock)
-	   
+
   ChemicalHeatingRateIon(:,:,:) = &
        ChemicalHeatingRateIon(:,:,:) * Element_Charge
 

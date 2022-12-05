@@ -438,8 +438,7 @@ subroutine aurora(iBlock)
               if (UseFangEnergyDeposition) then
 
                  BulkScaleHeight1d = &
-                         Temperature(j,i,1:nAlts,iBlock) &
-                         * TempUnit(j,i,1:nAlts) * Boltzmanns_Constant &
+                         (Temperature(j,i,1:nAlts,iBlock)*Boltzmanns_Constant) &
                          / (-Gravity_GB(j,i,1:nAlts,iBlock) * &
                          MeanMajorMass(j,i,1:nAlts))*100.0 ! Convert to cm
                  
@@ -573,9 +572,6 @@ subroutine aurora(iBlock)
         NextAuroralIonRateS(:,:,:,:,iBlock) =      AuroralIonRates(:,:,:,:,iBlock)
      NextAuroralHeatingRate(:,:,:,  iBlock) =   AuroralHeatingRate(:,:,:,  iBlock) 
 
-!     FrozenTempUnit(:,:,:,iBlock) = TempUnit(1:nLons,1:nLats,1:nAlts)
-!           FrozenCp(:,:,:,iBlock) =  cp(1:nLons,1:nLats,1:nAlts,iBlock)
-!          FrozenRho(:,:,:,iBlock) = Rho(1:nLons,1:nLats,1:nAlts,iBlock)
 
   endif !(floor((tSimulation-Dt)/DtAurora) /= &
   ! END DTCHECK
@@ -602,10 +598,8 @@ subroutine aurora(iBlock)
 
   endif!(IsFirstTime(iBlock)) then
 
-  ! Next, we scale the heating rate with TempUnit
   if (UseAuroralHeating) then
      AuroralHeating = NextAuroralHeatingRate(:,:,:,iBlock) / &
-          TempUnit(1:nLons,1:nLats,1:nAlts) / &
           Cp(:,:,1:nAlts,iBlock) / &
           Rho(1:nLons,1:nLats,1:nAlts, iBlock)
   else

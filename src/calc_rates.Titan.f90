@@ -69,12 +69,8 @@ subroutine calc_rates(iBlock)
           IDensityS(:,:,:,ie_,iBlock)
   enddo
 
-  !TempUnit = MeanMajorMass / Boltzmanns_Constant       
-  TempUnit = Mass(iN2_) / Boltzmanns_Constant       
-
   TL(1:nLons,1:nLats,0:nAlts+1) = &
-     Temperature(1:nLons,1:nLats,0:nAlts+1,iBlock)*&
-       TempUnit(1:nLons,1:nLats,0:nAlts+1)
+     Temperature(1:nLons,1:nLats,0:nAlts+1,iBlock)
 
   ones = 1.0
 
@@ -188,8 +184,7 @@ subroutine calc_collisions(iBlock)
   ! Need to get the neutral, ion, and electron temperature
   !/
 
-  Tn = Temperature(:,:,:,iBlock)*&
-       TempUnit(:,:,:)
+  Tn = Temperature(:,:,:,iBlock)
   Ti = ITemperature(:,:,:,iBlock)
 
   Tr = (Tn+Ti)/2
@@ -292,8 +287,7 @@ subroutine calc_viscosity_coef(iBlock)
   real :: fnc 
 
   TL(1:nLons,1:nLats,-1:nAlts+2) = &
-       Temperature(1:nLons,1:nLats,-1:nAlts+2,iBlock)*&
-       TempUnit(1:nLons,1:nLats,-1:nAlts+2)
+       Temperature(1:nLons,1:nLats,-1:nAlts+2,iBlock)
           
   ones = 1.0
 

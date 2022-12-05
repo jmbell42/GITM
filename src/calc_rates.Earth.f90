@@ -47,8 +47,6 @@ subroutine calc_rates(iBlock)
           IDensityS(:,:,:,ie_,iBlock)
   enddo
 
-  TempUnit = MeanMajorMass / Boltzmanns_Constant       
-
   !\
   ! These are needed for the Euv Heating and other thermodynamics:
   !/
@@ -65,16 +63,13 @@ subroutine calc_rates(iBlock)
           NDensity(1:nLons,1:nLats,iAlt,iBlock) + &
           NDensityS(1:nLons,1:nLats,iAlt,iN2_,iBlock)/ &
           NDensity(1:nLons,1:nLats,iAlt,iBlock)) * ThermalConduction_AO2 * &
-          (Temperature(1:nLons,1:nLats,ialt,iBlock)* &
-          TempUnit(1:nLons,1:nLats,iAlt))**ThermalConduction_s + &
+          Temperature(1:nLons,1:nLats,ialt,iBlock)**ThermalConduction_s + &
           (NDensityS(1:nLons,1:nLats,iAlt,iO_3P_,iBlock)/&
           NDensity(1:nLons,1:nLats,iAlt,iBlock)*ThermalConduction_AO) * &
-          (Temperature(1:nLons,1:nLats,iAlt,iBlock) * &
-          TempUnit(1:nLons,1:nLats,iAlt))**ThermalConduction_s + &
+          Temperature(1:nLons,1:nLats,iAlt,iBlock)**ThermalConduction_s + &
           (NDensityS(1:nLons,1:nLats,iAlt,iHe_,iBlock)/&
             NDensity(1:nLons,1:nLats,iAlt,iBlock)*(3.736e-03)) * &
-          (Temperature(1:nLons,1:nLats,iAlt,iBlock) * &
-          TempUnit(1:nLons,1:nLats,iAlt))**0.648
+          Temperature(1:nLons,1:nLats,iAlt,iBlock)**0.648
      
   enddo
 
@@ -111,7 +106,7 @@ subroutine calc_collisions(iBlock)
   ! Need to get the neutral, ion, and electron temperature
   !/
 
-  Tn = Temperature(:,:,:,iBlock)*TempUnit(:,:,:)
+  Tn = Temperature(:,:,:,iBlock)
   Ti = ITemperature(:,:,:,iBlock)
 
   Tr = (Tn+Ti)/2
@@ -309,7 +304,6 @@ subroutine calc_viscosity_coef(iBlock)
 
   integer :: iSpecies
 
-  ! TempUnit is mmm/boltzman
   ! visc should be sqrt(Tn * mmm / Boltz) * constant 
   ! The constant sets the viscosity to roughly 3.5 times the old
   ! viscosity for March 2-5, 2013. Not sure if this is ideal, so it
@@ -317,8 +311,7 @@ subroutine calc_viscosity_coef(iBlock)
 
   ViscCoef(1:nLons,1:nLats,0:nAlts+1) = TestViscosityFactor * &
        0.00013 * sqrt(Temperature(1:nLons,1:nLats,0:nAlts+1,iBlock) * &
-       TempUnit(1:nLons,1:nLats,0:nAlts+1) * &
-       TempUnit(1:nLons,1:nLats,0:nAlts+1))
+        MeanMajorMass(1:nLons,1:nLats,0:nAlts+1)/Boltzmanns_Constant)
 
   do iSpecies = 1, nSpecies
      ViscCoefS(1:nLons,1:nLats,0:nAlts+1,iSpecies) = & 

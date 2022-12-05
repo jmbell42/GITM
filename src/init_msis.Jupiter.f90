@@ -224,7 +224,6 @@ subroutine init_msis
 
 
 ! Calculate MeanMajorMass -----------------------------
-! Calculate TempUnit -----------------------------
 
      do iLat = -1,nLats + 2
         do iLon = -1,nLons + 2
@@ -257,10 +256,6 @@ subroutine init_msis
         enddo
      enddo
 
-     TempUnit(-1:nLons+2,-1:nLats+2,-1:nAlts+2) = &
-          MeanMajorMass(-1:nLons+2,-1:nLats+2,-1:nAlts+2)/&
-          Boltzmanns_Constant
-
      !\
      ! Initialize Rho to 0.0
      !/
@@ -268,8 +263,7 @@ subroutine init_msis
      Rho(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) = 0.0
 
      Temperature(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) = &
-          Temperature(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) / &
-          TempUnit(-1:nLons+2,-1:nLats+2,-1:nAlts+2)
+          Temperature(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) 
 
      Rho(-1:nLons+2,-1:nLats+2,-1:nAlts+2,iBlock) = &
           MeanMajorMass(-1:nLons+2,-1:nLats+2,-1:nAlts+2)* &

@@ -14,7 +14,7 @@ subroutine set_vertical_bcs(LogRho,LogNS,Vel_GD,Temp, LogINS, iVel, VertVel)
   use ModSizeGitm, only: nAlts
   use ModPlanet, only: nSpecies, nIonsAdvect, Mass, nIons, &
                        IsEarth, iN2_,iNO_, iN4S_, iO_
-  use ModGITM, only: TempUnit, iEast_, iNorth_, iUp_
+  use ModGITM, only: iEast_, iNorth_, iUp_
   use ModInputs
   use ModConstants
   use ModTime, only: UTime, iJulianDay,currenttime

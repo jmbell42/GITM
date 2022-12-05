@@ -68,8 +68,7 @@ subroutine calc_thermal_conduction(iBlock)
   endif
 
   DtCSLocal = Dt/2.0
-  TmpTemp = Temperature(1:nLons, 1:nLats,-1:nAlts+2, iBlock) * &
-       TempUnit(1:nLons, 1:nLats,-1:nAlts+2)
+  TmpTemp = Temperature(1:nLons, 1:nLats,-1:nAlts+2, iBlock) 
   TmpDiff = KappaTemp(1:nLons, 1:nLats, 0:nAlts+1, iBlock) + &
        Prandtl(1:nLons, 1:nLats, 0:nAlts+1)
 
@@ -78,12 +77,10 @@ subroutine calc_thermal_conduction(iBlock)
 
   TemperatureStage1(1:nLons,1:nLats,0:nAlts+1) = &
        Temperature(1:nLons,1:nLats,0:nAlts+1,iBlock) + &
-       MoleConduction(1:nLons,1:nLats,0:nAlts+1)/&
-       TempUnit(1:nLons,1:nLats,0:nAlts+1)
+       MoleConduction(1:nLons,1:nLats,0:nAlts+1)
 
   DtCSLocal = Dt/2.0
-  TmpTemp = TemperatureStage1(1:nLons, 1:nLats,-1:nAlts+2) * &
-       TempUnit(1:nLons, 1:nLats,-1:nAlts+2)
+  TmpTemp = TemperatureStage1(1:nLons, 1:nLats,-1:nAlts+2) 
   TmpDiff = KappaTemp(1:nLons, 1:nLats, 0:nAlts+1, iBlock) + &
        Prandtl(1:nLons, 1:nLats, 0:nAlts+1)
 
@@ -92,13 +89,11 @@ subroutine calc_thermal_conduction(iBlock)
 
   TemperatureH(1:nLons,1:nLats, 0:nAlts+1) = &
        TemperatureStage1(1:nLons,1:nLats,0:nAlts+1) + &
-       MoleConduction(1:nLons,1:nLats,0:nAlts+1)/&
-       TempUnit(1:nLons,1:nLats,0:nAlts+1)
+       MoleConduction(1:nLons,1:nLats,0:nAlts+1)
 
   ! Full Time Step Update
   DtCSLocal = Dt
-  TmpTemp = Temperature(1:nLons, 1:nLats,-1:nAlts+2, iBlock) * &
-       TempUnit(1:nLons, 1:nLats,-1:nAlts+2)
+  TmpTemp = Temperature(1:nLons, 1:nLats,-1:nAlts+2, iBlock) 
   TmpDiff = KappaTemp(1:nLons, 1:nLats, 0:nAlts+1, iBlock) + &
        Prandtl(1:nLons, 1:nLats, 0:nAlts+1)
 
@@ -107,8 +102,7 @@ subroutine calc_thermal_conduction(iBlock)
 
   TemperatureF(1:nLons,1:nLats, 0:nAlts+1) = &
        Temperature(1:nLons,1:nLats, 0:nAlts+1,iBlock) + &
-       MoleConduction(1:nLons,1:nLats, 0:nAlts+1) / &
-       TempUnit(1:nLons,1:nLats, 0:nAlts+1)
+       MoleConduction(1:nLons,1:nLats, 0:nAlts+1) 
 
   ! Note that Conduction is the net temperature update
   Conduction(1:nLons,1:nLats,0:nAlts+1) = &

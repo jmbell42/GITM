@@ -210,8 +210,7 @@ subroutine calc_planet_sources(iBlock)
   PhotoElectronHeating(:,:,:,iBlock) = &
        PhotoElectronHeating(:,:,:,iBlock) / &
        Rho(1:nLons,1:nLats,1:nAlts,iBlock) / &
-       cp(1:nLons,1:nLats,1:nAlts,iBlock) / &
-       TempUnit(1:nLons,1:nLats,1:nAlts)
+       cp(1:nLons,1:nLats,1:nAlts,iBlock) 
 
 !--------------------------------------------------------------------
 ! GLOW
@@ -382,8 +381,7 @@ subroutine calc_co2_cooling(iBlock)
   ! [CO2] cooling 
   ! Use real temperature (in K)
   true_temp(1:nLons,1:nLats,1:nAlts) = &
-        Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-           TempUnit(1:nLons,1:nLats,1:nAlts)
+        Temperature(1:nLons,1:nLats,1:nAlts,iBlock)
 
 !  ! First, determine what optical thickness we are in
   co2_emission_cross_section = 6.43e-19 ! m^2 15-micron absorption cross-section
@@ -468,7 +466,7 @@ subroutine calc_co2_cooling(iBlock)
           CO2Cooling(1:nLons,1:nLats,iAlt) * &
           dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
   enddo
-  CO2Cooling = CO2Cooling / TempUnit(1:nLons,1:nLats,1:nAlts) / &
+  CO2Cooling = CO2Cooling / &
        (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
 
 endsubroutine calc_co2_cooling
@@ -513,8 +511,7 @@ subroutine calc_co2_cooling_fomichev(iBlock)
   ! [CO2] cooling 
   ! Use real temperature (in K)
   true_temp(1:nLons,1:nLats,1:nAlts) = &
-        Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-           TempUnit(1:nLons,1:nLats,1:nAlts)
+        Temperature(1:nLons,1:nLats,1:nAlts,iBlock)
 
 !  ! First, determine what optical thickness we are in
   co2_emission_cross_section = 6.43e-19 ! m^2 15-micron absorption cross-section
@@ -583,7 +580,7 @@ subroutine calc_co2_cooling_fomichev(iBlock)
           CO2Cooling(1:nLons,1:nLats,iAlt) * &
           dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
   enddo
-  CO2Cooling = CO2Cooling / TempUnit(1:nLons,1:nLats,1:nAlts) / &
+  CO2Cooling = CO2Cooling / &
        (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
 
 endsubroutine calc_co2_cooling_fomichev
@@ -610,10 +607,8 @@ subroutine calc_o3p_cooling(iBlock)
   ! We reduce the LTE 63-um cooling rate by a factor of 2 for 
   ! the non-LTE effects.[Roble,1987]         
 
-  tmp2 = exp(-228./(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-       TempUnit(1:nLons,1:nLats,1:nAlts)))
-  tmp3 = exp(-326./(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-       TempUnit(1:nLons,1:nLats,1:nAlts)))
+  tmp2 = exp(-228./Temperature(1:nLons,1:nLats,1:nAlts,iBlock))
+  tmp3 = exp(-326./Temperature(1:nLons,1:nLats,1:nAlts,iBlock))
 
   ! In erg/cm3/s
   ! JMB: Updated to account for cool-to-space. Divide emission by 2.0
@@ -640,7 +635,7 @@ subroutine calc_o3p_cooling(iBlock)
   enddo
 
  ! Convert energy rates into [GITM Temp]/s
- OCooling = OCooling/ TempUnit(1:nLons,1:nLats,1:nAlts) / &
+ OCooling = OCooling/ &
        (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
 
 endsubroutine calc_o3p_cooling
@@ -686,8 +681,7 @@ subroutine calc_no_cooling(iBlock)
   !-----------
   ! Use real temperature (in K)
   true_temp(1:nLons,1:nLats,1:nAlts) = &
-        Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-           TempUnit(1:nLons,1:nLats,1:nAlts)
+        Temperature(1:nLons,1:nLats,1:nAlts,iBlock)
   !-------
 
   !NOCooling = Planck_Constant * Speed_Light / &
@@ -696,7 +690,6 @@ subroutine calc_no_cooling(iBlock)
   !     exp(- Planck_Constant * Speed_Light / &
   !     (5.3e-6 * Boltzmanns_Constant * &
   !     Temperature(1:nLons,1:nLats,1:nAlts,iBlock)* &
-  !     TempUnit(1:nLons,1:nLats,1:nAlts))) * &
   !     NDensityS(1:nLons,1:nLats,1:nAlts,iNO_,iBlock)
 
   emission_wavelength = 5.3e-06  ! emission wavelength (IR) in meter
@@ -733,7 +726,7 @@ subroutine calc_no_cooling(iBlock)
           dAlt_GB(1:nLons,1:nLats,iAlt,iBlock)
   enddo
 
-  NOCooling = NOCooling / TempUnit(1:nLons,1:nLats,1:nAlts) / &
+  NOCooling = NOCooling / &
        (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
 
 endsubroutine calc_no_cooling

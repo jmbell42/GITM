@@ -268,11 +268,8 @@ subroutine init_msis
                       sum(NDensityS(iLon,iLat,iAlt,1:nSpecies,iBlock))
               enddo
   
-              TempUnit(iLon,iLat,iAlt) = &
-                   MeanMajorMass(iLon,iLat,iAlt)/ Boltzmanns_Constant
-
               Temperature(iLon,iLat,iAlt,iBlock) = &
-                   msis_temp(2)/TempUnit(iLon,iLat,iAlt)
+                   msis_temp(2)
 
               Rho(iLon,iLat,iAlt,iBlock) = msis_dens(6)
 
@@ -507,17 +504,13 @@ subroutine calc_co2(iBlock)
   real, dimension(-1:nLons+2, -1:nLats+2, -1:nAlts+2) :: &
        Have, Hn2, Ho, r, Hco2, Hco2t
 
-  Have  = -Boltzmanns_Constant * &
-       Temperature(:,:,:,iBlock)*TempUnit / ( &
+  Have  = -Boltzmanns_Constant * Temperature(:,:,:,iBlock) / ( &
        MeanMajorMass * Gravity_GB(:,:,:,iBlock))
-  Hn2   = -Boltzmanns_Constant * &
-       Temperature(:,:,:,iBlock)*TempUnit / ( &
+  Hn2   = -Boltzmanns_Constant * Temperature(:,:,:,iBlock) / ( &
        Mass(iN2_) * Gravity_GB(:,:,:,iBlock))
-  Ho    = -Boltzmanns_Constant * &
-       Temperature(:,:,:,iBlock)*TempUnit / ( &
+  Ho    = -Boltzmanns_Constant * Temperature(:,:,:,iBlock) / ( &
        Mass(iO_3P_) * Gravity_GB(:,:,:,iBlock))
-  Hco2t = -Boltzmanns_Constant * &
-       Temperature(:,:,:,iBlock)*TempUnit / ( &
+  Hco2t = -Boltzmanns_Constant * Temperature(:,:,:,iBlock) / ( &
        Mass(iCO2_) * Gravity_GB(:,:,:,iBlock))
 
   ! This calculates the ratio between the current average scale height

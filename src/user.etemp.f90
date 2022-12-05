@@ -82,7 +82,6 @@ subroutine user_perturbation
               UserHeatingRate(iLon,iLat,iAlt,iBlock) =  &
                    1000.0 * 4.184e6 * f(iLon,iLat) / &
                    cellvolume(iLon,iLat,iAlt,iBlock) / &
-                   TempUnit(iLon,iLat,iAlt) / &
                    cp(iLon,iLat,iAlt,iBlock) / &
                    rho(iLon,iLat,iAlt,iBlock)
            enddo

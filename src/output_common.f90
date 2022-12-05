@@ -1149,7 +1149,7 @@ subroutine output_3dall(iBlock)
                 Altitude_GB(iLon,iLat,iAlt,iBlock),&
                 Rho(iLon,iLat,iAlt,iBlock),&
                 (NDensityS(iLon,iLat,iAlt,i,iBlock),i=1,nSpeciesTotal), &
-                Temperature(iLon,iLat,iAlt,iBlock)*TempUnit(iLon,iLat,iAlt),&
+                Temperature(iLon,iLat,iAlt,iBlock),&
                 (Velocity(iLon,iLat,iAlt,i,iBlock),i=1,3), &
                 (VerticalVelocity(iLon,iLat,iAlt,i,iBlock),i=1,nSpecies), &
                 (IDensityS(iLon,iLat,iAlt,i,iBlock),i=1,nIons), &
@@ -1226,7 +1226,7 @@ subroutine output_3dlst(iBlock)
            
            if (iTemperatureOutputList(1)) then
               iOff=iOff+1
-              tmp(iOff) = Temperature(iLon,iLat,iAlt,iBlock)*TempUnit(iLon,iLat,iAlt)
+              tmp(iOff) = Temperature(iLon,iLat,iAlt,iBlock)
            endif
            if (iTemperatureOutputList(2)) then
               iOff=iOff+1
@@ -1271,7 +1271,7 @@ subroutine output_3dneu(iBlock)
                 Altitude_GB(iLon,iLat,iAlt,iBlock),&
                 Rho(iLon,iLat,iAlt,iBlock),&
                 NDensityS(iLon,iLat,iAlt,:,iBlock), &
-                Temperature(iLon,iLat,iAlt,iBlock)*TempUnit(iLon,iLat,iAlt),&
+                Temperature(iLon,iLat,iAlt,iBlock),&
                 velocity(iLon,iLat,iAlt,:,iBlock) , &
                 VerticalVelocity(iLon,iLat,iAlt,:,iBlock)
         enddo
@@ -1352,16 +1352,16 @@ subroutine output_3dthm(iBlock)
                 Longitude(iLon,iBlock),               &
                 Latitude(iLat,iBlock),                &
                 Altitude_GB(iLon,iLat,iAlt,iBlock),   &
-                EuvHeating(iiLon,iiLat,iiAlt,iBlock)*dt*TempUnit(iiLon,iiLat,iiAlt),    &
-                Conduction(iiLon,iiLat,iiAlt)*TempUnit(iiLon,iiLat,iiAlt),              &
+                EuvHeating(iiLon,iiLat,iiAlt,iBlock)*dt,&
+                Conduction(iiLon,iiLat,iiAlt),&
                 MoleConduction(iiLon,iiLat,iiAlt),                             &
                 EddyCond(iiLon,iiLat,iiAlt),                                   &
                 EddyCondAdia(iiLon,iiLat,iiAlt),                               &
-                ChemicalHeatingRate(iiLon,iiLat,iiAlt)*TempUnit(iiLon,iiLat,iiAlt),     &
-                AuroralHeating(iiLon,iiLat,iiAlt)*dt*TempUnit(iiLon,iiLat,iiAlt),       &
-                JouleHeating(iiLon,iiLat,iiAlt)*dt*TempUnit(iiLon,iiLat,iiAlt),         &
-                -NOCooling(iiLon,iiLat,iiAlt)*dt*TempUnit(iiLon,iiLat,iiAlt),           &
-                -OCooling(iiLon,iiLat,iiAlt)*dt*TempUnit(iiLon,iiLat,iiAlt),            &
+                ChemicalHeatingRate(iiLon,iiLat,iiAlt),&
+                AuroralHeating(iiLon,iiLat,iiAlt)*dt,&
+                JouleHeating(iiLon,iiLat,iiAlt)*dt,&
+                -NOCooling(iiLon,iiLat,iiAlt)*dt,&
+                -OCooling(iiLon,iiLat,iiAlt)*dt,&
                 EuvTotal(iiLon,iiLat,iiAlt,iBlock) * dt, &
                 cp(iiLon, iiLat, iiAlt, iBlock),  &
                 rho(iiLon, iiLat, iiAlt, iBlock),  &
@@ -1400,16 +1400,16 @@ subroutine output_3dhme(iBlock)
                 Altitude_GB(iLon,iLat,iAlt,iBlock),&
                 Rho(iLon,iLat,iAlt,iBlock),&
                 (NDensityS(iLon,iLat,iAlt,i,iBlock),i=1,nSpeciesTotal), &
-                Temperature(iLon,iLat,iAlt,iBlock)*TempUnit(iLon,iLat,iAlt),&
+                Temperature(iLon,iLat,iAlt,iBlock),&
                 (Velocity(iLon,iLat,iAlt,i,iBlock),i=1,3), &
                 (VerticalVelocity(iLon,iLat,iAlt,i,iBlock),i=1,nSpecies), &
                 (IDensityS(iLon,iLat,iAlt,i,iBlock),i=1,nIons), &
                 eTemperature(iLon,iLat,iAlt,iBlock), &
                 ITemperature(iLon,iLat,iAlt,iBlock), &
                 (Ivelocity(iLon,iLat,iAlt,i,iBlock),i=1,3), &
-                PhotoElectronHeating(iLon,iLat,iiAlt,iBlock)*dt*TempUnit(iLon,iLat,iiAlt), &
-                JouleHeating(iLon,iLat,iiAlt)*dt*TempUnit(iLon,iLat,iiAlt), &
-                AuroralHeating(iLon,iLat,iiAlt)*dt*TempUnit(iLon,iLat,iiAlt), &
+                PhotoElectronHeating(iLon,iLat,iiAlt,iBlock)*dt,&
+                JouleHeating(iLon,iLat,iiAlt)*dt,&
+                AuroralHeating(iLon,iLat,iiAlt)*dt,&
                 cp(iLon,iLat,iiAlt,iBlock), &
                 mLatitude(iLon,iLat,iAlt,iBlock), &
                 mLongitude(iLon,iLat,iAlt,iBlock), &
@@ -1450,16 +1450,16 @@ subroutine output_1dthm
           Longitude(1,1),               &
           Latitude(1,1),                &
           Altitude_GB(1,1,iAlt,1),   &
-          EuvHeating(1,1,iiAlt,1)*dt*TempUnit(1,1,iiAlt),    &
-          Conduction(1,1,iiAlt)*TempUnit(1,1,iiAlt),              &
+          EuvHeating(1,1,iiAlt,1)*dt,&
+          Conduction(1,1,iiAlt),&
           MoleConduction(1,1,iiAlt),                             &
           EddyCond(1,1,iiAlt),                                   &
           EddyCondAdia(1,1,iiAlt),                               &
-          ChemicalHeatingRate(1,1,iiAlt)*TempUnit(1,1,iiAlt),     &
-          AuroralHeating(1,1,iiAlt)*dt*TempUnit(1,1,iiAlt),       &
-          JouleHeating(1,1,iiAlt)*dt*TempUnit(1,1,iiAlt),         &
-          -RadCooling(1,1,iiAlt,1)*dt*TempUnit(1,1,iiAlt),           &
-          -OCooling(1,1,iiAlt)*dt*TempUnit(1,1,iiAlt),            &
+          ChemicalHeatingRate(1,1,iiAlt),&
+          AuroralHeating(1,1,iiAlt)*dt,&
+          JouleHeating(1,1,iiAlt)*dt,&
+          -RadCooling(1,1,iiAlt,1)*dt,&
+          -OCooling(1,1,iiAlt)*dt,&
           EuvTotal(1,1,iiAlt,1) * dt,                             &
           varsS, varsL
                    
@@ -1496,7 +1496,7 @@ subroutine output_1dchm(iBlock)
           Vars, &
           ChemicalHeatingRate(1,1,iiAlt) * &
           cp(1,1,iiAlt,iBlock) *   &
-          Rho(1,1,iiAlt,iBlock)*TempUnit(1,1,iiAlt) / &
+          Rho(1,1,iiAlt,iBlock)/&
           Element_Charge
   enddo
 
@@ -1538,7 +1538,7 @@ subroutine output_3dchm(iBlock)
                    Vars, &
                    ChemicalHeatingRate(iiLon,iiLat,iiAlt) * &
                    cp(iilon,iiLat,iiAlt,iBlock) *   &
-                   Rho(iilon,iiLat,iiAlt,iBlock)*TempUnit(iilon,iiLat,iiAlt) / &
+                   Rho(iilon,iiLat,iiAlt,iBlock)/&
                    Element_Charge
         enddo
      enddo
@@ -1880,8 +1880,7 @@ subroutine output_1dall(iiLon, iiLat, iBlock, rLon, rLat, iUnit)
         Vars(iOff+iSpecies) = inter(Tmp,iiLon,iiLat,rlon,rlat)
      enddo
 
-     Tmp = Temperature(0:nLons+1,0:nLats+1,iAlt,iBlock) * &
-          TempUnit(0:nLons+1,0:nLats+1,iAlt)
+     Tmp = Temperature(0:nLons+1,0:nLats+1,iAlt,iBlock) 
      iOff = 5+nSpeciesTotal
      Vars(iOff) = inter(Tmp,iiLon,iiLat,rlon,rlat)
 
@@ -1931,16 +1930,13 @@ subroutine output_1dall(iiLon, iiLat, iBlock, rLon, rLat, iUnit)
 !! AGB: Fixed this to use interpolation like all the other variables.
 !!      Also the porper lat and lon
 !     iOff = iOff + nSpecies
-!     Tmp = Dt*RadCooling(0:nLons+1,0:nLats+1,iAlt,iBlock) * &
-!          TempUnit(0:nLons+1,0:nLats+1,iAlt)
+!     Tmp = Dt*RadCooling(0:nLons+1,0:nLats+1,iAlt,iBlock) 
 !     Vars(iOff+1) = inter(Tmp,iiLon,iiLat,rlon,rlat)
 !
-!     Tmp = Dt*EuvHeating(0:nLons+1,0:nLats+1,iAlt,iBlock) * &
-!          TempUnit(0:nLons+1,0:nLats+1,iAlt)
+!     Tmp = Dt*EuvHeating(0:nLons+1,0:nLats+1,iAlt,iBlock) 
 !     Vars(iOff+2) = inter(Tmp,iiLon,iiLat,rlon,rlat)
 !
-!     Tmp(1:nLons,1:nLats) = Conduction(1:nLons,1:nLats,iAlt) * &
-!          TempUnit(1:nLons,1:nLats,iAlt)
+!     Tmp(1:nLons,1:nLats) = Conduction(1:nLons,1:nLats,iAlt) 
 !     Vars(iOff+3) = inter(Tmp,iiLon,iiLat,rlon,rlat)
 ! 
 !     Vars(iOff+4) = Vars(iOff+2) - Vars(iOff+1) + Vars(iOff+3)
@@ -2013,8 +2009,7 @@ subroutine output_0dall(iiLon, iiLat, iiAlt, iBlock, rLon, rLat, rAlt, iUnit)
      Vars(iOff+iSpecies) = inter(Tmp,iiLon,iiLat,iiAlt,rLon,rLat,rAlt)
   enddo
 
-  Tmp = Temperature(0:nLons+1,0:nLats+1,0:nAlts+1,iBlock) * &
-       TempUnit(0:nLons+1,0:nLats+1,0:nAlts+1)
+  Tmp = Temperature(0:nLons+1,0:nLats+1,0:nAlts+1,iBlock) 
   iOff = 5+nSpeciesTotal
   Vars(iOff) = inter(Tmp,iiLon,iiLat,iiAlt,rLon,rLat,rAlt)
 
@@ -2062,15 +2057,15 @@ subroutine output_0dall(iiLon, iiLat, iiAlt, iBlock, rLon, rLat, rAlt, iUnit)
   enddo
 
   iOff = iOff + nSpecies
-  Vars(iOff+1) = Dt*RadCooling(1,1,jAlt,iBlock)*TempUnit(1,1,jAlt)
+  Vars(iOff+1) = Dt*RadCooling(1,1,jAlt,iBlock)
 
-  Vars(iOff+2) = Dt*EuvHeating(1,1,jAlt,iBlock)*TempUnit(1,1,jAlt)
+  Vars(iOff+2) = Dt*EuvHeating(1,1,jAlt,iBlock)
 
-  Vars(iOff+3) = Conduction(1,1,jAlt)*TempUnit(1,1,jAlt)
+  Vars(iOff+3) = Conduction(1,1,jAlt)
 
-  Vars(iOff+4) = Dt*EuvHeating(1,1,jAlt,iBlock)*TempUnit(1,1,jAlt) - &
-       Dt*RadCooling(1,1,jAlt,iBlock)*TempUnit(1,1,jAlt) + &
-       Conduction(1,1,jAlt)*TempUnit(1,1,jAlt)
+  Vars(iOff+4) = Dt*EuvHeating(1,1,jAlt,iBlock) - &
+       Dt*RadCooling(1,1,jAlt,iBlock) + &
+       Conduction(1,1,jAlt)
 
   Vars(iOff+5) = HeatingEfficiency_CB(1,1,jAlt,iBlock)
 
@@ -2140,8 +2135,7 @@ subroutine output_1dnew(iiLon, iiLat, iBlock, rLon, rLat, iUnit)
         Vars(iOff+iSpecies) = inter(Tmp,iiLon,iiLat,rlon,rlat)
      enddo
 
-     Tmp = Temperature(0:nLons+1,0:nLats+1,iAlt,iBlock) * &
-          TempUnit(0:nLons+1,0:nLats+1,iAlt)
+     Tmp = Temperature(0:nLons+1,0:nLats+1,iAlt,iBlock)
      iOff = 7+nSpeciesTotal
      Vars(iOff) = inter(Tmp,iiLon,iiLat,rlon,rlat)
 

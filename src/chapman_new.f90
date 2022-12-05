@@ -63,7 +63,7 @@ subroutine chapman_integrals(iBlock)
               else
                  ScaleHeightS = &
                       Temperature(iLon,iLat,iAlt,iBlock) &
-                      * TempUnit(iLon,iLat,iAlt) * Boltzmanns_Constant &
+                      * Boltzmanns_Constant &
                       / (-Gravity_GB(iLon,iLat,iAlt,iBlock) * Mass(iSpecies))
 
                  Integrals(iLon,iLat,iAlt,iSpecies) = &
@@ -71,7 +71,7 @@ subroutine chapman_integrals(iBlock)
               endif
               ScaleHeightS = &
                    Temperature(iLon,iLat,iAlt,iBlock) &
-                   *TempUnit(iLon,iLat,iAlt) * Boltzmanns_Constant &
+                   * Boltzmanns_Constant &
                    / (-Gravity_GB(iLon,iLat,iAlt,iBlock) * Mass(iSpecies))
 
               ! JMB Update
@@ -129,11 +129,11 @@ subroutine chapman_integrals(iBlock)
 
                   ! Variables for Linear Interpolation:
                    HpUp = ( Temperature(iLon,iLat,iiAlt+1,iBlock) &
-                   *TempUnit(iLon,iLat,iiAlt+1) * Boltzmanns_Constant &
+                   * Boltzmanns_Constant &
                    / (-Gravity_GB(iLon,iLat,iiAlt+1,iBlock) * Mass(iSpecies)) ) 
 
                    HpDown = ( Temperature(iLon,iLat,iiAlt,iBlock) &
-                   *TempUnit(iLon,iLat,iiAlt) * Boltzmanns_Constant &
+                   * Boltzmanns_Constant &
                    / (-Gravity_GB(iLon,iLat,iiAlt,iBlock) * Mass(iSpecies)) ) 
 
                   GradHs = ( HpUp - HpDown)/&

@@ -52,8 +52,7 @@ subroutine calc_reaction_rates(iLon,iLat,iAlt,iBlock)
 
             te = eTemperature(iLon,iLat,iAlt,iBlock)
            ti = iTemperature(iLon,iLat,iAlt,iBlock)
-           tn = Temperature(iLon,iLat,iAlt,iBlock)*&
-                TempUnit(iLon,iLat,iAlt)
+           tn = Temperature(iLon,iLat,iAlt,iBlock)
 
 
 !\ --------------------------------------------------------------------------

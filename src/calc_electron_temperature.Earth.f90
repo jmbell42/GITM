@@ -75,7 +75,7 @@ subroutine calc_electron_ion_temperature(iBlock)
 
   call report("calc_electron_temperature", 2)
   
-  tn = Temperature(1:nLons,1:nLats,0:nAlts+1,iBlock)*TempUnit(1:nLons,1:nLats,0:nAlts+1)
+  tn = Temperature(1:nLons,1:nLats,0:nAlts+1,iBlock)
   nn = NDensity(1:nLons,1:nLats,0:nAlts+1,iBlock)
   ne = IDensityS(1:nLons,1:nLats,0:nAlts+1,ie_,iBlock)
   ni = IDensityS(1:nLons,1:nLats,0:nAlts+1,ie_,iBlock)
@@ -292,7 +292,7 @@ subroutine calc_electron_ion_temperature(iBlock)
         a(1)=0
         b(1)=1
         c(1)=0
-        d(1)=Temperature(iLon,iLat,1,iBlock)*TempUnit(iLon,iLat,1)
+        d(1)=Temperature(iLon,iLat,1,iBlock)
   
         a(nAlts) =  -1
         b(nAlts) =  1
@@ -352,7 +352,7 @@ subroutine calc_electron_ion_temperature(iBlock)
         a(1)=0
         b(1)=1
         c(1)=0
-        d(1)=Temperature(iLon,iLat,1,iBlock)*TempUnit(iLon,iLat,1)
+        d(1)=Temperature(iLon,iLat,1,iBlock)
       
         call tridag(a, b, c, d, u)
 
@@ -562,8 +562,7 @@ subroutine calc_electron_ion_sources(iBlock) !,eHeatingp,iHeatingp,eHeatingm,iHe
   ti  = iTemperature(0:nLons+1,0:nLats+1,0:nAlts+1,iBlock) 
   te_con  = eTemperature(-1:nLons+2,-1:nLats+2,0:nAlts+1,iBlock)
   ti_con  = iTemperature(-1:nLons+2,-1:nLats+2,0:nAlts+1,iBlock) 
-  tn  = Temperature(0:nLons+1,0:nLats+1,0:nAlts+1,iBlock)* &
-        TempUnit(0:nLons+1,0:nLats+1,0:nAlts+1)
+  tn  = Temperature(0:nLons+1,0:nLats+1,0:nAlts+1,iBlock)
   nn  = NDensity(0:nLons+1,0:nLats+1,0:nAlts+1,iBlock)
   ne  = IDensityS(0:nLons+1,0:nLats+1,0:nAlts+1,ie_,iBlock)
   ni  = IDensityS(0:nLons+1,0:nLats+1,0:nAlts+1,ie_,iBlock)
@@ -1186,13 +1185,7 @@ subroutine calc_electron_ion_sources(iBlock) !,eHeatingp,iHeatingp,eHeatingm,iHe
   if (UseJouleHeating .and. UseIonDrag) then
 
      JouleHeating = (Qnic_t(1:nLons,1:nLats,1:nAlts) + Qnic_v(1:nLons,1:nLats,1:nAlts))/ &
-          TempUnit(1:nLons,1:nLats,1:nAlts) / &
           cp(1:nLons,1:nLats,1:nAlts,iBlock) / Rho(1:nLons,1:nLats,1:nAlts,iBlock)
-
-     ! This is the old approximation: 
-     !     JouleHeating = (Qnic_v(1:nLons,1:nLats,1:nAlts) * 2.)/ &
-     !          TempUnit(1:nLons,1:nLats,1:nAlts) / &
-     !          cp(1:nLons,1:nLats,1:nAlts,iBlock) / Rho(1:nLons,1:nLats,1:nAlts,iBlock)
 
      do iAlt=1,nAlts
         JouleHeating2d(1:nLons, 1:nLats) = &
@@ -1210,7 +1203,6 @@ subroutine calc_electron_ion_sources(iBlock) !,eHeatingp,iHeatingp,eHeatingm,iHe
   endif
 
   ElectronHeating = -Qenc(1:nLons,1:nLats,1:nAlts) / &
-          TempUnit(1:nLons,1:nLats,1:nAlts) / &
           cp(1:nLons,1:nLats,1:nAlts,iBlock) / Rho(1:nLons,1:nLats,1:nAlts,iBlock)
 
 !!!!!!  Qaurora = 0.0

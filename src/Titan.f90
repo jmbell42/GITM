@@ -252,8 +252,7 @@ subroutine calc_planet_sources(iBlock)
        rho(1:nLons,1:nLats,1:nAlts,iBlock)  )
 
   RadCooling(1:nLons,1:nLats,1:nAlts,iBlock) = &
-     RadCooling(1:nLons,1:nLats,1:nAlts,iBlock)/&
-       TempUnit(1:nLons,1:nLats,1:nAlts) 
+     RadCooling(1:nLons,1:nLats,1:nAlts,iBlock)
 
 ! call calc_saturn_tides(iBlock)
   TideADep(:,:,:,:,iBlock) = 0.0
@@ -274,8 +273,7 @@ subroutine calc_planet_sources(iBlock)
 !     ! multiplied by 1e6 for /cm2 to /m2
 !     CO2Cooling = 0.165e6 * NDensityS(1:nLons,1:nLats,1:nAlts,iCO2_,iBlock)*&
 !          exp(-960.0/( &
-!            Temperature(1:nLons,1:nLats,1:nAlts,iBlock)* &
-!            TempUnit(1:nLons,1:nLats,1:nAlts))) * &
+!            Temperature(1:nLons,1:nLats,1:nAlts,iBlock)
 !          MeanMajorMass(1:nLons,1:nLats,1:nAlts) * ( &
 !           (NDensityS(1:nLons,1:nLats,1:nAlts,iO2_,iBlock)/Mass(iO2_) + &
 !            NDensityS(1:nLons,1:nLats,1:nAlts,iN2_,iBlock)/Mass(iN2_)) * &
@@ -302,11 +300,10 @@ subroutine calc_planet_sources(iBlock)
 !          Omega * 13.3 *  &
 !          exp(- Planck_Constant * Speed_Light / &
 !          (5.3e-6 * Boltzmanns_Constant * &
-!          Temperature(1:nLons,1:nLats,1:nAlts,iBlock)* &
-!          TempUnit(1:nLons,1:nLats,1:nAlts))) * &
+!          Temperature(1:nLons,1:nLats,1:nAlts,iBlock)
 !          NDensityS(1:nLons,1:nLats,1:nAlts,iNO_,iBlock)
 !
-!     NOCooling = NOCooling / TempUnit(1:nLons,1:nLats,1:nAlts) / &
+!     NOCooling = NOCooling / 
 !          (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
 !
 !  else
@@ -326,9 +323,7 @@ subroutine calc_planet_sources(iBlock)
 !     ! the non-LTE effects.[Roble,1987]         
 !
 !     tmp2 = exp(-228./(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-!          TempUnit(1:nLons,1:nLats,1:nAlts)))
 !     tmp3 = exp(-326./(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-!          TempUnit(1:nLons,1:nLats,1:nAlts)))
 !
 !     ! In erg/cm3/s
 !     OCooling = (1.69e-18*tmp2 + 4.59e-20*tmp3) * &
@@ -337,7 +332,7 @@ subroutine calc_planet_sources(iBlock)
 !     ! In w/m3/3
 !     OCooling = OCooling/10.0
 !     ! In our special units:
-!     OCooling = OCooling/ TempUnit(1:nLons,1:nLats,1:nAlts) / &
+!     OCooling = OCooling/ 
 !          (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
 !
 !  else
@@ -377,8 +372,7 @@ subroutine calc_planet_sources(iBlock)
 !  PhotoElectronHeating(:,:,:,iBlock) = &
 !       PhotoElectronHeating(:,:,:,iBlock) / &
 !       Rho(1:nLons,1:nLats,1:nAlts,iBlock) / &
-!       cp(1:nLons,1:nLats,1:nAlts,iBlock) / &
-!       TempUnit(1:nLons,1:nLats,1:nAlts)
+!       cp(1:nLons,1:nLats,1:nAlts,iBlock) 
 
 !--------------------------------------------------------------------
 ! GLOW
@@ -661,7 +655,7 @@ end subroutine !set_planet_defaults
        do iLat = 1, nLats
 
        T(-1:nAlts+2) = &
-        Temperature(iLon,iLat,-1:nAlts+2,iBlock)*TempUnit(iLon,iLat,-1:nAlts+2)
+        Temperature(iLon,iLat,-1:nAlts+2,iBlock)
 
        NHCN(-1:nAlts+2) = &
         NDensityS(iLon,iLat,-1:nAlts+2,iHCN_,iBlock)*1.0e-06
@@ -1976,7 +1970,7 @@ end subroutine !set_planet_defaults
        do iLat = 1, nLats
 
        T(-1:nAlts+2) = &
-        Temperature(iLon,iLat,-1:nAlts+2,iBlock)*TempUnit(iLon,iLat,-1:nAlts+2)
+        Temperature(iLon,iLat,-1:nAlts+2,iBlock)
 
        NHCN(-1:nAlts+2) = &
         NDensityS(iLon,iLat,-1:nAlts+2,iHCN_,iBlock)*1.0e-06

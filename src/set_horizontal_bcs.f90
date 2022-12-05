@@ -475,9 +475,8 @@ subroutine set_horizontal_bcs_1point(iLon,iLat,iAlt,iBlock,iPoint)
           Mass(iSpecies) * NDensityS(iLon,iLat,iAlt,iSpecies,iBlock) / &
           sum(NDensityS(iLon,iLat,iAlt,:,iBlock))
   enddo
-  TempUnit(iLon,iLat,iAlt) = MeanMajorMass(iLon,iLat,iAlt) / Boltzmanns_Constant
   Temperature(iLon,iLat,iAlt,iBlock) = &
-       GitmFileData(iPoint,iTn_) / TempUnit(iLon,iLat,iAlt)
+       GitmFileData(iPoint,iTn_) 
 
   eTemperature(iLon,iLat,iAlt,iBlock) = GitmFileData(iPoint,iTe_)
   iTemperature(iLon,iLat,iAlt,iBlock) = GitmFileData(iPoint,iTe_+1)

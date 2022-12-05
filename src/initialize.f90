@@ -26,7 +26,7 @@ subroutine initialize_gitm(TimeIn)
   real :: LogRho(-1:nLons+2,-1:nLats+2), NewSumRho(-1:nLons+2,-1:nLats+2)
   real :: GradAlt_CD(nLons, nLats, nAlts, 3)
 
-  real :: TempUnit_const, t, h,meanaltzero,altdiff, dAlt
+  real :: t, h,meanaltzero,altdiff, dAlt
 
   logical :: IsThere, IsOk, IsDone, IsFirstTime = .true.
 
@@ -390,15 +390,14 @@ subroutine initialize_gitm(TimeIn)
         call init_msis
      else
 
-        TempUnit_const = 1. * Mass(1) / Boltzmanns_Constant
-        TempAve  = (TempMax+TempMin)/2/TempUnit_const
-        TempDiff = (TempMax-TempMin)/2/TempUnit_const
+        TempAve  = (TempMax+TempMin)/2
+        TempDiff = (TempMax-TempMin)/2
 
         do iBlock = 1, nBlocks
 
            do iAlt=-1,nAlts+2
               call get_temperature(0.0, 0.0, Altitude_GB(:,:,iAlt,iBlock), t, h)
-              Temperature(:,:,iAlt,iBlock)  = t/TempUnit_const
+              Temperature(:,:,iAlt,iBlock)  = t
               eTemperature(:,:,iAlt,iBlock) = t
               iTemperature(:,:,iAlt,iBlock) = t
            enddo
@@ -413,7 +412,7 @@ subroutine initialize_gitm(TimeIn)
 
                  InvScaleHeightS = -Gravity_GB(:,:,iAlt,iBlock) * &
                       Mass(iSpecies) / &
-                      (Temperature(:,:,iAlt,iBlock)*TempUnit_const* &
+                      (Temperature(:,:,iAlt,iBlock)* &
                       Boltzmanns_Constant)
 
                  if(iAlt < 2)then

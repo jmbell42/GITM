@@ -53,8 +53,7 @@ subroutine add_sources
      ! because Conduction now spans(0:nAlts+1)
      Temperature(1:nLons, 1:nLats, 1:nAlts, iBlock) = &
           Temperature(1:nLons, 1:nLats, 1:nAlts, iBlock) + Dt * ( &
-          LowAtmosRadRate(1:nLons, 1:nLats, 1:nAlts, iBlock) &
-          /TempUnit(1:nLons,1:nLats,1:nAlts)&
+          LowAtmosRadRate(1:nLons, 1:nLats, 1:nAlts, iBlock) & 
           - RadCooling(1:nLons, 1:nLats, 1:nAlts, iBlock) &
           + EuvHeating(1:nLons, 1:nLats, 1:nAlts, iBlock) &
           + PhotoElectronHeating(1:nLons, 1:nLats, 1:nAlts, iBlock) &

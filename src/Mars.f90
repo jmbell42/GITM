@@ -142,8 +142,6 @@ subroutine calc_planet_sources(iBlock)
   ! RadCoolingRate is in K/s (from nltecool.F routine)
   ! --------------------------------------------------
   ! RadCoolingRate = K/s
-  ! RadCoolingRate/TempUnit = <T>/s
-  ! TempUnit = MeanMajorMass/kb = K*kg/J = K/(m/s)^2
   ! --------------------------------------------------
   ! cp is in J/kg/K
   ! rho is in kg/m^3
@@ -152,8 +150,7 @@ subroutine calc_planet_sources(iBlock)
   ! --------------------------------------------------
   !/ Cooling ON
   RadCooling(1:nLons,1:nLats,1:nAlts,iBlock) = &
-       RadCoolingRate(1:nLons,1:nLats,1:nAlts,iBlock)/&
-       (TempUnit(1:nLons,1:nLats,1:nAlts)) 
+       RadCoolingRate(1:nLons,1:nLats,1:nAlts,iBlock)
 
   !/ Cooling OFF (zeroed out)
   !    RadCooling = 0.0
@@ -172,10 +169,8 @@ subroutine calc_planet_sources(iBlock)
      ! b. We reduce the LTE 63-um cooling rate by a factor of 2 for
      !    the non-LTE effects.[Roble et.al,1987, JGR, 92, 8745]
 
-     tmp2 = exp(-228./(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-          TempUnit(1:nLons,1:nLats,1:nAlts)))
-     tmp3 = exp(-326./(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-          TempUnit(1:nLons,1:nLats,1:nAlts)))
+     tmp2 = exp(-228./Temperature(1:nLons,1:nLats,1:nAlts,iBlock))
+     tmp3 = exp(-326./Temperature(1:nLons,1:nLats,1:nAlts,iBlock))
 
      ! In erg/cm3/s
 !  Factor of two applied:
@@ -191,7 +186,7 @@ subroutine calc_planet_sources(iBlock)
      ! In w/m3/3
      OCooling = OCooling/10.0
      ! In our special units:
-     OCooling = OCooling/ TempUnit(1:nLons,1:nLats,1:nAlts) / &
+     OCooling = OCooling/ & 
           (Rho(1:nLons,1:nLats,1:nAlts,iBlock)*cp(:,:,1:nAlts,iBlock))
 
   else
@@ -210,8 +205,6 @@ subroutine calc_planet_sources(iBlock)
   !/
   ! --------------------------------------------------
   ! xLowAtmosRadRate = K/s
-  ! xLowAtmosRadRate/TempUnit = <T>/s
-  ! TempUnit = MeanMajorMass/kb = K*kg/J = K/(m/s)^2
   ! --------------------------------------------------
   !
   !     Mars GITM ground temperature (on its grid) -------------------
@@ -275,10 +268,8 @@ subroutine calc_planet_sources(iBlock)
            !     Mars GITM ground temperature (on its grid) -------------------
            if (minval(Altitude_GB(:,:,0,iBlock)) .lt. 0 .or. UseTopography) then
 
-              Temperature(iLon,iLat,0,iBlock)=SurfaceTemp(iLon,iLat,iBlock)/&
-                   TempUnit(iLon,iLat,0)
-              Temperature(iLon,iLat,-1,iBlock)=SurfaceTemp(iLon,iLat,iBlock)/&
-                   TempUnit(iLon,iLat,-1)
+              Temperature(iLon,iLat,0,iBlock)=SurfaceTemp(iLon,iLat,iBlock)
+              Temperature(iLon,iLat,-1,iBlock)=SurfaceTemp(iLon,iLat,iBlock)
 
            endif
 
@@ -299,10 +290,6 @@ subroutine calc_planet_sources(iBlock)
 
         end do !Latitude Loop
      end do    !Longitude Loop
-
-!!$     xLowAtmosRadRate(1:nLons,1:nLats,1:nAlts,iBlock) = &
-!!$          xLowAtmosRadRate(1:nLons,1:nLats,1:nAlts,iBlock)/&
-!!$          (TempUnit(1:nLons,1:nLats,1:nAlts))
 
   endif
 
@@ -507,8 +494,7 @@ subroutine calc_radcooling(iBlock)
   !     Mars GITM real temperature (on its grid)  ----------------------
 
   T(1:nLons,1:nLats,1:nAlts) = &
-       Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*  &
-       TempUnit(1:nLons,1:nLats,1:nAlts)
+       Temperature(1:nLons,1:nLats,1:nAlts,iBlock)
 
   !     Mars GITM pressure in pascals  (on its grid) -------------------
 
@@ -664,8 +650,7 @@ subroutine calc_radcooling(iBlock)
                Pressure(1:nLons, 1:nLats, 1:nAlts, iBlock)*10.0
      UserData3D(:,:,:,9,iBlock) = 0.0
      UserData3D(1:nLons, 1:nLats, 1:nAlts, 9, iBlock) =  &
-               Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*  &
-               TempUnit(1:nLons,1:nLats,1:nAlts)
+               Temperature(1:nLons,1:nLats,1:nAlts,iBlock)
      UserData3D(:,:,:,10,iBlock) = 0.0
      UserData3D(1:nLons, 1:nLats, 1:nAlts, 10, iBlock) =  &
                vmro(1:nLons,1:nLats,1:nAlts)
@@ -677,8 +662,7 @@ subroutine calc_radcooling(iBlock)
      UserData1D(1, 1, 1:nAlts, 8) =  Pressure(1, 1, 1:nAlts, iBlock)*10.0
      UserData1D(1,1,:,9) = 0.0
      UserData1D(1, 1, 1:nAlts, 9) =   &
-               Temperature(1,1,1:nAlts,iBlock)*  &
-               TempUnit(1,1,1:nAlts)
+               Temperature(1,1,1:nAlts,iBlock)
      UserData1D(1,1,:,10) = 0.0
      UserData1D(1, 1, 1:nAlts, 10) = vmro(1,1,1:nAlts)
      UserData1D(1,1,:,11) = 0.0
@@ -1031,7 +1015,7 @@ end subroutine init_isochem
            rhogw = Rho(ilon,ilat,1:nAlts,iBlock) ! Is this correct ??
 
            geot = Altitude_GB(ilon,ilat,1:nAlts,iBlock) ! Is this correct ?
-           T = Temperature(ilon,ilat,1:nAlts,iBlock)*TempUnit(ilon,ilat,1:nAlts)
+           T = Temperature(ilon,ilat,1:nAlts,iBlock)
            pz = rhogw * RCO2 * t
            THETA = t * (psfc/pz)**(RCO2/CpCO2)
 
@@ -1461,8 +1445,7 @@ end subroutine init_isochem
     !     Mars GITM real temperature (on its grid)  ----------------------
 
     T(1:nAlts) = &
-         Temperature(iLon,iLat,1:nAlts,iBlock)*  &
-         TempUnit(iLon,iLat,1:nAlts)
+         Temperature(iLon,iLat,1:nAlts,iBlock)
 
     !     Mars GITM pressure in mbars  (on its grid) -------------------
 

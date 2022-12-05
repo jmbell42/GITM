@@ -182,8 +182,7 @@ subroutine calc_radcooling(iBlock)
   !     Mars GITM real temperature (on its grid)  ----------------------
 
   T(1:nLons,1:nLats,1:nAlts) = &
-       Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*  &
-       TempUnit(1:nLons,1:nLats,1:nAlts)
+       Temperature(1:nLons,1:nLats,1:nAlts,iBlock)
 
   !     Mars GITM pressure in pascals  (on its grid) -------------------
 

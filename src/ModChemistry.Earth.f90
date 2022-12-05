@@ -25,8 +25,7 @@ subroutine calc_reaction_rates(iLon,iLat,iAlt,iBlock)
   
   integer, intent(in) :: iLon,iLat,iAlt,iBlock
 
-   tn = Temperature(iLon,iLat,iAlt,iBlock)*&
-       TempUnit(iLon,iLat,iAlt)
+   tn = Temperature(iLon,iLat,iAlt,iBlock)
    
   tr = (iTemperature(iLon,iLat,iAlt,iBlock) &
        + tn) / 2.0

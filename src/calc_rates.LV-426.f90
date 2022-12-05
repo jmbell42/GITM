@@ -41,8 +41,6 @@ subroutine calc_rates(iBlock)
           IDensityS(:,:,:,ie_,iBlock)
   enddo
 
-  TempUnit = MeanMajorMass / Boltzmanns_Constant       
-
   !\
   ! These are needed for the Euv Heating and other thermodynamics:
   !/
@@ -53,12 +51,10 @@ subroutine calc_rates(iBlock)
      
      KappaTemp(:,:,iAlt,iBlock) = &
           KappaTemp0 * &
-          (Temperature(1:nLons,1:nLats,iAlt,iBlock) * &
-          TempUnit(1:nLons,1:nLats,iAlt))**0.69
+          (Temperature(1:nLons,1:nLats,iAlt,iBlock))**0.69
         
      ViscCoef(1:nLons,1:nLats,iAlt) = 4.5e-5 * &
-          (Temperature(1:nLons,1:nLats,iAlt,iBlock)*&
-          TempUnit(1:nLons,1:nLats,iAlt)/ 1000.)**(-0.71)
+          (Temperature(1:nLons,1:nLats,iAlt,iBlock) / 1000.)**(-0.71)
 
   enddo
 
@@ -89,7 +85,7 @@ subroutine calc_collisions(iBlock)
   ! Need to get the neutral, ion, and electron temperature
   !/
 
-  Tn = Temperature(:,:,:,iBlock)*TempUnit(:,:,:)
+  Tn = Temperature(:,:,:,iBlock)
   Ti = ITemperature(:,:,:,iBlock)
 
   Tr = (Tn+Ti)/2
@@ -139,8 +135,7 @@ subroutine calc_viscosity_coef(iBlock)
 
   ! This is Earth-based, and 
   ViscCoef(1:nLons,1:nLats,0:nAlts+1) = 4.5e-5 * &
-       (Temperature(1:nLons,1:nLats,0:nAlts+1,iBlock)*&
-       TempUnit(1:nLons,1:nLats,0:nAlts+1)/ 1000.)**(-0.71)
+       (Temperature(1:nLons,1:nLats,0:nAlts+1,iBlock)/ 1000.)**(-0.71)
 
 end subroutine calc_viscosity_coef
 

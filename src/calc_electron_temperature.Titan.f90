@@ -54,7 +54,7 @@ subroutine calc_electron_temperature(iBlock,eHeatingp,iHeatingp,eHeatingm,iHeati
 
   integer :: iLon, iLat, iAlt
 
-  tn = Temperature(1:nLons,1:nLats,0:nAlts+1,iBlock)*TempUnit(1:nLons,1:nLats,0:nAlts+1)
+  tn = Temperature(1:nLons,1:nLats,0:nAlts+1,iBlock)
   nn = NDensity(1:nLons,1:nLats,0:nAlts+1,iBlock)
   ne = IDensityS(1:nLons,1:nLats,0:nAlts+1,ie_,iBlock)
   ni = IDensityS(1:nLons,1:nLats,0:nAlts+1,ie_,iBlock)
@@ -67,19 +67,19 @@ subroutine calc_electron_temperature(iBlock,eHeatingp,iHeatingp,eHeatingm,iHeati
       do iAlt = -1, nAlts+2
         eTemperature(iLon,iLat,iAlt,iBlock) = &
             0.5*(1000.0 - &
-                 Temperature(iLon,iLat,iAlt,iBlock)*TempUnit(iLon,iLat,iAlt))*&
+                 Temperature(iLon,iLat,iAlt,iBlock))*&
              (1.0 + tanh( (Altitude_GB(iLon,iLat,iAlt,iBlock) - 1050.0e+03)/100.0e+03)) + &
-                 Temperature(iLon,iLat,iAlt,iBlock)*TempUnit(iLon,iLat,iAlt)
+                 Temperature(iLon,iLat,iAlt,iBlock)
 
 !         iTemperature(iLon,iLat,iAlt,iBlock) = &
 !            0.5*(eTemperature(iLon,iLat,iAlt,iBlock) + &
-!                  Temperature(iLon,iLat,iAlt,iBlock)*TempUnit(iLon,iLat,iAlt))
+!                  Temperature(iLon,iLat,iAlt,iBlock)
 
         iTemperature(iLon,iLat,iAlt,iBlock) = &
             0.5*(eTemperature(iLon,iLat,iAlt,iBlock) - &
-                 Temperature(iLon,iLat,iAlt,iBlock)*TempUnit(iLon,iLat,iAlt))*&
+                 Temperature(iLon,iLat,iAlt,iBlock))*&
              (1.0 + tanh( (Altitude_GB(iLon,iLat,iAlt,iBlock) - 1900.0e+03)/200.0e+03)) + &
-                 Temperature(iLon,iLat,iAlt,iBlock)*TempUnit(iLon,iLat,iAlt)
+                 Temperature(iLon,iLat,iAlt,iBlock)
       enddo !iAlt = -1, nAlts+2
     enddo !iLat = -1, nLats+2
   enddo !iLon = -1, nLons+2
@@ -274,7 +274,7 @@ subroutine calc_electron_temperature(iBlock,eHeatingp,iHeatingp,eHeatingm,iHeati
 !      a(1)=0
 !      b(1)=1
 !      c(1)=0
-!      d(1)=Temperature(iLon,iLat,1,iBlock)*TempUnit(iLon,iLat,1)
+!      d(1)=Temperature(iLon,iLat,1,iBlock)
 !  
 !      a(nAlts) =  -1
 !      b(nAlts) =  1
@@ -341,7 +341,7 @@ subroutine calc_electron_temperature(iBlock,eHeatingp,iHeatingp,eHeatingm,iHeati
 !      a(1)=0
 !      b(1)=1
 !      c(1)=0
-!      d(1)=Temperature(iLon,iLat,1,iBlock)*TempUnit(iLon,iLat,1)
+!      d(1)=Temperature(iLon,iLat,1,iBlock)
 !      
 !      call tridag(a, b, c, d, u)
 !
@@ -561,8 +561,7 @@ subroutine calc_electron_ion_sources(iBlock,eHeatingp,iHeatingp,eHeatingm,iHeati
   ti  = iTemperature(0:nLons+1,0:nLats+1,0:nAlts+1,iBlock) 
   te_con  = eTemperature(-1:nLons+2,-1:nLats+2,0:nAlts+1,iBlock)
   ti_con  = iTemperature(-1:nLons+2,-1:nLats+2,0:nAlts+1,iBlock) 
-  tn  = Temperature(0:nLons+1,0:nLats+1,0:nAlts+1,iBlock)* &
-        TempUnit(0:nLons+1,0:nLats+1,0:nAlts+1)
+  tn  = Temperature(0:nLons+1,0:nLats+1,0:nAlts+1,iBlock)
   nn  = NDensity(0:nLons+1,0:nLats+1,0:nAlts+1,iBlock)
   ne  = IDensityS(0:nLons+1,0:nLats+1,0:nAlts+1,ie_,iBlock)
   ni  = IDensityS(0:nLons+1,0:nLats+1,0:nAlts+1,ie_,iBlock)
@@ -1214,12 +1213,8 @@ subroutine calc_electron_ion_sources(iBlock,eHeatingp,iHeatingp,eHeatingm,iHeati
   
   if (UseJouleHeating .and. UseIonDrag) then
 
-!     JouleHeating = (Qnic_t(1:nLons,1:nLats,1:nAlts) + Qnic_v(1:nLons,1:nLats,1:nAlts))/ &
-!          TempUnit(1:nLons,1:nLats,1:nAlts) / &
-!          cp(1:nLons,1:nLats,1:nAlts,iBlock) / Rho(1:nLons,1:nLats,1:nAlts,iBlock)
       
      JouleHeating = (Qnic_v(1:nLons,1:nLats,1:nAlts) * 2.)/ &
-          TempUnit(1:nLons,1:nLats,1:nAlts) / &
           cp(1:nLons,1:nLats,1:nAlts,iBlock) / Rho(1:nLons,1:nLats,1:nAlts,iBlock)
     
  else
@@ -1229,7 +1224,6 @@ subroutine calc_electron_ion_sources(iBlock,eHeatingp,iHeatingp,eHeatingm,iHeati
  endif
 
   ElectronHeating = -Qenc(1:nLons,1:nLats,1:nAlts) / &
-          TempUnit(1:nLons,1:nLats,1:nAlts) / &
           cp(1:nLons,1:nLats,1:nAlts,iBlock) / Rho(1:nLons,1:nLats,1:nAlts,iBlock)
 
 !!!!!!  Qaurora = 0.0

@@ -177,7 +177,6 @@ module ModGITM
   real, allocatable :: PhotoEFluxTotal(:,:,:,:,:)
   
   real, dimension(nPhotoBins)                 :: PhotoEBins
-  real, dimension(-1:nLons+2, -1:nLats+2, -1:nAlts+2) :: TempUnit
 
   real :: LocalTime(-1:nLons+2)
 

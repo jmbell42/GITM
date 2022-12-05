@@ -61,9 +61,6 @@ subroutine init_msis
 
               MeanMajorMass(iLon,iLat,iAlt) = Mass(iH2_)
   
-              TempUnit(iLon,iLat,iAlt) = &
-                   MeanMajorMass(iLon,iLat,iAlt)/ Boltzmanns_Constant
-
               Temperature(iLon,iLat,iAlt,iBlock) = 100.0
 
               Rho(iLon,iLat,iAlt,iBlock) = &

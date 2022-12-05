@@ -345,9 +345,9 @@ subroutine calc_chemistry(iBlock)
 
   ChemicalHeatingRate(:,:,:) = &
        ChemicalHeatingRate(:,:,:) * Element_Charge / &
-       TempUnit(1:nLons,1:nLats,1:nAlts) / cp(1:nLons,1:nLats,1:nAlts,iBlock)/&
+       cp(1:nLons,1:nLats,1:nAlts,iBlock)/&
        rho(1:nLons,1:nLats,1:nAlts,iBlock)
-	   
+
   ChemicalHeatingRateIon(:,:,:) = &
        ChemicalHeatingRateIon(:,:,:) * Element_Charge
 

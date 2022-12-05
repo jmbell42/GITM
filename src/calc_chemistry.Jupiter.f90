@@ -54,7 +54,7 @@ subroutine calc_chemistry(iBlock)
      do iLat = 1, nLats
         do iAlt = 1, nAlts
 
-           tn = Temperature(iLon,iLat,iAlt,iBlock)/TempUnit(iLon,iLat,iAlt)
+           tn = Temperature(iLon,iLat,iAlt,iBlock)
 
            !! CHANGE
            te300 = 300.0 / eTemperature(iLon,iLat,iAlt,iBlock)
@@ -341,9 +341,9 @@ subroutine calc_chemistry(iBlock)
 
   ChemicalHeatingRate(:,:,:) = &
        ChemicalHeatingRate(:,:,:) * Element_Charge / &
-       TempUnit(1:nLons,1:nLats,1:nAlts) / cp(1:nLons,1:nLats,1:nAlts,iBlock)/&
+       cp(1:nLons,1:nLats,1:nAlts,iBlock)/&
        rho(1:nLons,1:nLats,1:nAlts,iBlock)
-	   
+
   ChemicalHeatingRateIon(:,:,:) = &
        ChemicalHeatingRateIon(:,:,:) * Element_Charge
 

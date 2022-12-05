@@ -20,7 +20,8 @@ subroutine calc_pressure
           NDensity(:,:,:,1:nBlocks) + NDensityS(:,:,:,iSpecies,1:nBlocks)
   enddo
 
-  Pressure    = Temperature * Rho
+  !Pressure    = Temperature * Rho
+  Pressure    = NDensity * Boltzmanns_Constant * Temperature
 
   IPressure = 0.0
   do iSpecies = 1, nIons-1

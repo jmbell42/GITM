@@ -41,9 +41,6 @@ subroutine set_bcs
         enddo
      enddo
 
-!     Temperature(:,:,nAlts+1,iBlock) = TempMax/TempUnit
-!     Temperature(:,:,nAlts+2,iBlock) = TempMax/TempUnit
-
      Temperature(:,:,nAlts+1,iBlock) = Temperature(:,:,nAlts,iBlock)
      Temperature(:,:,nAlts+2,iBlock) = Temperature(:,:,nAlts,iBlock)
 

@@ -151,7 +151,10 @@ subroutine advance_horizontal(iBlock)
      cp_c       =               cp(:,:,iAlt,iBlock)
      Gamma_c    =            gamma(:,:,iAlt,iBlock) 
      Rho_C      =              Rho(:,:,iAlt,iBlock)
-     Temp_C     =      Temperature(:,:,iAlt,iBlock)
+     !Temp_C     =      Temperature(:,:,iAlt,iBlock)
+     ! J/kg -> N-m/kg -> kg-m^2/s^2/kg -> m^2/s^2
+     Temp_C     =      Temperature(:,:,iAlt,iBlock)*Boltzmanns_Constant/&
+                                MeanMajorMass(:,:,iAlt)
      Vel_CD     =         Velocity(:,:,iAlt,1:3,iBlock)
      IVel_CD    =        IVelocity(:,:,iAlt,1:3,iBlock)
      VertVel_CV = VerticalVelocity(:,:,iAlt,1:nSpecies,iBlock)
@@ -376,8 +379,11 @@ subroutine advance_horizontal(iBlock)
      ! After the RK-4 Update, we update the state variables
                   Rho(1:nLons,1:nLats,iAlt,iBlock)             = &
              NewRho_C(1:nLons,1:nLats)
+     !     Temperature(1:nLons,1:nLats,iAlt,iBlock)             = &
+     !       NewTemp_C(1:nLons,1:nLats)
           Temperature(1:nLons,1:nLats,iAlt,iBlock)             = &
-            NewTemp_C(1:nLons,1:nLats)
+            NewTemp_C(1:nLons,1:nLats)*MeanMajorMass(1:nLons,1:nLats,iAlt)/&
+                Boltzmanns_Constant
 
              Velocity(1:nLons,1:nLats,iAlt,1:3,iBlock)         = &
             NewVel_CD(1:nLons,1:nLats,1:3)

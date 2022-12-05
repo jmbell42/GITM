@@ -140,7 +140,7 @@ subroutine advance_vertical(iLon,iLat,iBlock)
 
   !!!! CHANGE !!!!
 
-  Temp    = Temperature(iLon,iLat,:,iBlock)*TempUnit(iLon,iLat,:)
+  Temp    = Temperature(iLon,iLat,:,iBlock)
   do iSpecies = 1, nSpecies 
      LogNS1(:,iSpecies)  = log(NDensityS(iLon,iLat,:,iSpecies,iBlock))
      VertVel(:,iSpecies) = VerticalVelocity(iLon,iLat,:,iSpecies,iBlock)
@@ -197,7 +197,7 @@ subroutine advance_vertical(iLon,iLat,iBlock)
      Velocity(iLon,iLat,:,iDim,iBlock) = Vel_GD(:,iDim)
   enddo
 
-  Temperature(iLon,iLat,:,iBlock) = Temp/TempUnit(iLon,iLat,:)
+  Temperature(iLon,iLat,:,iBlock) = Temp
 
   do iSpecies = 1, nSpecies 
      LogNS(iLon,iLat,:,iSpecies,iBlock) = LogNS1(:,iSpecies)

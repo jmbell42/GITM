@@ -193,10 +193,6 @@ trouble = .false.
   enddo
   MeanIonMass = MeanIonMass * invNe
 
-! -------------------------------------------------------------------------------
-  TempUnit = MeanMajorMass / Boltzmanns_Constant       
-! -------------------------------------------------------------------------------
-
 !write(*,*) '==> calc_rates:  Before Mixing Ratio Calculation.'
 
 !   Mixing Ratios needed for Kt and Km calculations below
@@ -210,19 +206,13 @@ trouble = .false.
 !    pn2(:,:,0:nAlts+1)  = NDensityS(:,:,0:nAlts+1,iN2_,iBlock)*invmnd(:,:,0:nAlts+1)
 !    pco2(:,:,0:nAlts+1) = NDensityS(:,:,0:nAlts+1,iCO2_,iBlock)*invmnd(:,:,0:nAlts+1)
  
-! !   Temperature Based Arrays 
-!    ttot(:,:,0:nAlts+1) = Temperature(:,:,0:nAlts+1,iBlock) * &
-!                          TempUnit(:,:,0:nAlts+1)   
-!    tt(:,:,0:nAlts+1) = ttot(:,:,0:nAlts+1)**0.69
-
    po   = NDensityS(:,:,:,iO_,iBlock)*invmnd
    pco  = NDensityS(:,:,:,iCO_,iBlock)*invmnd
    pn2  = NDensityS(:,:,:,iN2_,iBlock)*invmnd
    pco2 = NDensityS(:,:,:,iCO2_,iBlock)*invmnd
  
 !   Temperature Based Arrays 
-   ttot = Temperature(:,:,:,iBlock) * &
-                         TempUnit   
+   ttot = Temperature(:,:,:,iBlock) 
    tt = ttot**0.69
 
 !  enddo
@@ -305,17 +295,6 @@ trouble = .false.
 
 ! -------------------------------------------------------------------------------
 !
-!    if (Is1D .and. UseKappa1DCorrection) then
-!       KappaTemp(:,:,iAlt,iBlock) = KappaTemp0 * &
-!            (Temperature(1:nLons,1:nLats,iAlt,iBlock) * &
-!            TempUnit(1:nLons,1:nLats,iAlt) / &
-!            Kappa1DCorrectionFactor)**Kappa1dCorrectionPower
-!    else
-!       KappaTemp(:,:,iAlt,iBlock) = KappaTemp0 * &
-!           (Temperature(1:nLons,1:nLats,iAlt,iBlock) * &
-!            TempUnit(1:nLons,1:nLats,iAlt))**0.75
-!    endif
-
         KappaTemp(:,:,iAlt,iBlock) =  ktmix(1:nLons,1:nLats,iAlt) 
 
 ! -------------------------------------------------------------------------------
@@ -333,15 +312,6 @@ trouble = .false.
         enddo
      enddo
 ! -------------------------------------------------------------------------------
-
-!   Earth GITM formulation for Molecular Viscosity (mks)
-!    ViscCoef(:,:,iAlt) = 4.5e-5 * &
-!         (Temperature(1:nLons,1:nLats,iAlt,iBlock)*&
-!         TempUnit(1:nLons,1:nLats,iAlt)/ 1000.)**(-0.71)
-!   MTGCM formulation for Molecular Viscosity requires cgs to mks conversion
-!   * Scaling of Molecular Viscosity for spun-up stability
-!    ViscCoef(:,:,iAlt) =  kmmix(1:nLons,1:nLats,iAlt)*10.0
-!   * No scaling of molecular vciscosity
      ViscCoef(1:nLons,1:nLats,iAlt) =  kmmix(1:nLons,1:nLats,iAlt)
 
 !  * Benchmark: Jan.-March 2013
@@ -391,8 +361,7 @@ subroutine calc_collisions(iBlock)
   ! Need to get the neutral, ion, and electron temperature
   !/
 
-  Tn = Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-       TempUnit(1:nLons,1:nLats,1:nAlts)
+  Tn = Temperature(1:nLons,1:nLats,1:nAlts,iBlock)
   Ti = ITemperature(1:nLons,1:nLats,1:nAlts,iBlock)
 
   mnd = NDensity(:,:,:,iBlock)+1.0

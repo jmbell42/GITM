@@ -59,8 +59,7 @@ subroutine get_glow(iLon,iLat,iBlock)
  
   call GL_setND(ZRHO,ZO,ZN2,ZO2,ZNO,ZNS,ZND)
 
-  ZTN(1:nAlts)   = Temperature(iLon,iLat,1:nAlts,iBlock) * &
-             TempUnit(iLon,iLat,1:nAlts)
+  ZTN(1:nAlts)   = Temperature(iLon,iLat,1:nAlts,iBlock) 
   ZTI(1:nAlts)   = iTemperature(iLon,iLat,1:nAlts,iBlock)
   ZTE(1:nAlts)   = eTemperature(iLon,iLat,1:nAlts,iBlock)
   

@@ -365,13 +365,6 @@ do iBlock = 1, nBlocks
       do iLon = -1, nLons + 2
          do iAlt = -1, nAlts + 2
 
-           !TempUnit(iLon,iLat,iAlt) = MeanMajorMass(iLon,iLat,iAlt)/Boltzmanns_Constant
-           TempUnit(iLon,iLat,iAlt) = Mass(iN2_)/Boltzmanns_Constant
-!!! Scale Temps to the GITM Format
-           Temperature(iLon,iLat,iAlt,iBlock) = &
-           Temperature(iLon,iLat,iAlt,iBlock)/TempUnit(iLon,iLat,iAlt)
-!!! Reduce HCN by factor of 10 from VDH's values
-
 
             do iIon = 1, nIons-1 
             IDensityS(iLon,iLat,iAlt,iIon,iBlock) = &

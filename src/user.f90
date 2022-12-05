@@ -31,7 +31,6 @@ subroutine get_mean_bcs
      
      LocalMeanTempBc = LocalMeanTempBc + &
           sum(Temperature(1:nLons,1:nLats,-1:0,iBlock) &
-          *   TempUnit(1:nLons,1:nLats,-1:0) &
           *   CellVolume(1:nLons,1:nLats,-1:0,iBlock))
      
      LocalSumVolume = LocalSumVolume + &
@@ -142,7 +141,6 @@ subroutine user_perturbation
               UserHeatingRate(iLon,iLat,iAlt,iBlock) =  &
                    1000.0 * 4.184e6 * f(iLon,iLat) / &
                    cellvolume(iLon,iLat,iAlt,iBlock) / &
-                   TempUnit(iLon,iLat,iAlt) / &
                    cp(iLon,iLat,iAlt,iBlock) / &
                    rho(iLon,iLat,iAlt,iBlock)
            enddo

@@ -34,7 +34,7 @@ subroutine calc_electron_temperature(iBlock)
 !
 !          Alt = Altitude_GB(iLon,iLat,iAlt,iBlock) /1000.0
 !          if (Alt < 130.0) eTemperature(iLon,iLat,iAlt,iBlock) = &
-!               Temperature(iLon,iLat,iAlt,iBlock) * TempUnit(iLon,iLat,iAlt)
+!               Temperature(iLon,iLat,iAlt,iBlock) 
 !
 !          if (Alt > 180.0) eTemperature(iLon,iLat,iAlt,iBlock) = &
 !               4200.0 - 3750.0*exp((180-Alt)/89.6)
@@ -58,12 +58,12 @@ subroutine calc_electron_temperature(iBlock)
            Alt = Altitude_GB(iLon,iLat,iAlt,iBlock) /1000.0
            if (Alt < 130.0) Then
               eTemperature(iLon,iLat,iAlt,iBlock) = &
-                  Temperature(iLon,iLat,iAlt,iBlock) * TempUnit(iLon,iLat,iAlt)
+                  Temperature(iLon,iLat,iAlt,iBlock) 
               k130 = ialt 
            endif
 
            if (Alt >= 130.0 .and. Alt <= 180.0) Then
-              TN130 = Temperature(iLon,iLat,k130,iBlock)*TempUnit(iLon,iLat,k130)
+              TN130 = Temperature(iLon,iLat,k130,iBlock)
               eTemperature(iLon,iLat,iAlt,iBlock) = TN130+(TE180-TN130)*(Alt-130.)/50.
            endif
 
@@ -87,7 +87,7 @@ subroutine calc_electron_temperature(iBlock)
 
            Alt = Altitude_GB(iLon,iLat,iAlt,iBlock) /1000.0
            if (Alt < 180.0) iTemperature(iLon,iLat,iAlt,iBlock) = &
-                Temperature(iLon,iLat,iAlt,iBlock) * TempUnit(iLon,iLat,iAlt)
+                Temperature(iLon,iLat,iAlt,iBlock) 
 
            if (Alt > 300.0) iTemperature(iLon,iLat,iAlt,iBlock) = &
                 eTemperature(iLon,iLat,iAlt,iBlock)

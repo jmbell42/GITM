@@ -116,9 +116,7 @@ subroutine write_restart(dir)
              Mass(iSpecies) * NDensityS(:,:,:,iSpecies,iBlock)/   & 
              sum(NDensityS(:,:,:,1:3,iBlock),4) 
      enddo
-     TempUnit(:,:,:) = &  
-          MeanMajorMass(:,:,:)/ Boltzmanns_Constant 
-     write(iRestartUnit_) Temperature(:,:,:,iBlock)*TempUnit(:,:,:)
+     write(iRestartUnit_) Temperature(:,:,:,iBlock)
      ! alexey writes out temperature in Kelvin instead of scaled unit
      ! alexey end
 
@@ -424,9 +422,7 @@ subroutine read_restart(dir)
              Mass(iSpecies) * NDensityS(:,:,:,iSpecies,iBlock)/   &  
              sum(NDensityS(:,:,:,1:3,iBlock),4)  
      enddo  
-     TempUnit(:,:,:) = &  
-          MeanMajorMass(:,:,:)/ Boltzmanns_Constant  
-     Temperature(:,:,:,iBlock) =  Temperature(:,:,:,iBlock)/TempUnit(:,:,:) 
+     Temperature(:,:,:,iBlock) =  Temperature(:,:,:,iBlock)
 !alexey end
 
      if (iDebugLevel > 4) write(*,*) "=====> Reading ITemperature"

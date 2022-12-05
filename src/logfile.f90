@@ -53,14 +53,11 @@ subroutine get_log_info(SSLon, SSLat, GlobalMinTemp, GlobalMaxTemp, &
      call calc_rates(iBlock)
 
      GlobalMaxTemp = max(GlobalMaxTemp, &
-          maxval(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)* &
-          TempUnit(1:nLons,1:nLats,1:nAlts)))
+          maxval(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)))
      GlobalMinTemp = min(GlobalMinTemp, &
-          minval(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)* &
-          TempUnit(1:nLons,1:nLats,1:nAlts)))
+          minval(Temperature(1:nLons,1:nLats,1:nAlts,iBlock)))
      AverageTemp = AverageTemp + &
           sum(Temperature(1:nLons,1:nLats,1:nAlts,iBlock) &
-          *   TempUnit(1:nLons,1:nLats,1:nAlts) &
           *   CellVolume(1:nLons,1:nLats,1:nAlts,iBlock))
 
      GlobalMaxVertVel = max(GlobalMaxVertVel, &

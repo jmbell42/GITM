@@ -207,11 +207,9 @@ subroutine euv_ionization_heat(iBlock)
          
          EuvHeating(:,:,iAlt,iBlock) = NextEuvHeatingRate(:,:,iAlt,iBlock) / &
               Rho(1:nLons,1:nLats,iAlt,iBlock) / &
-              cp(1:nLons,1:nLats,iAlt,iBlock) / &
-              TempUnit(1:nLons,1:nLats,iAlt)
+              cp(1:nLons,1:nLats,iAlt,iBlock) 
 
          EuvTotal(:,:,iAlt,iBlock) = EuvHeating(:,:,iAlt,iBlock) * &
-              TempUnit(1:nLons,1:nLats,iAlt) / &
               HeatingEfficiency_CB(:,:,iAlt,iBlock)
       enddo
 
@@ -415,7 +413,7 @@ contains
           else
              ScaleHeightS =  &
                   Temperature(1:nLons,1:nLats,iAlt,iBlock) &
-                  * TempUnit(1:nLons,1:nLats,iAlt) * Boltzmanns_Constant &
+                  * Boltzmanns_Constant &
                   / (-Gravity_GB(1:nLons,1:nLats,iAlt,iBlock) * Mass(iSpecies))
              night_col(:,:,iAlt,iSpecies) = nNeutralDensity(:,:,iSpecies) &
                   * ScaleHeightS

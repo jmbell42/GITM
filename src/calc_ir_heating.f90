@@ -106,10 +106,8 @@ subroutine calc_ir_heating(iBlock)
                    x03*(1 - r_sza) + x12*r_sza
 
               !Given in K/s. No need for rho or cp because that             
-              !converts J/s -> K/s. Need TempUnit to normalize it to               
               !GITM units                                                        
-              QnirTOT(iLon, iLat, iAlt, iBlock) = QnirTOT(iLon, iLat, iAlt, iBlock)  &
-                   / TempUnit(iLon,iLat,iAlt)! &        
+              QnirTOT(iLon, iLat, iAlt, iBlock) = QnirTOT(iLon, iLat, iAlt, iBlock) 
               ! / Rho(iLon,iLat,iAlt, iBlock) &       
               ! / cp(iLon,iLat,iAlt,iBlock)        
            endif
@@ -148,10 +146,8 @@ subroutine calc_ir_heating(iBlock)
               endif
 
               !Given in K/s. No need for rho or cp because that                              
-              !converts J/s -> K/s. Need TempUnit to normalize it to              
               !GITM units                                                       
-              QnirTOT(iLon, iLat, iAlt, iBlock) = QnirTOT(iLon, iLat, iAlt, iBlock)  &
-                   / TempUnit(iLon,iLat,iAlt)! &      
+              QnirTOT(iLon, iLat, iAlt, iBlock) = QnirTOT(iLon, iLat, iAlt, iBlock) 
               ! / Rho(iLon,iLat,iAlt, iBlock) &       
               ! / cp(iLon,iLat,iAlt,iBlock)           
            endif

@@ -50,9 +50,6 @@ module ModSmoothDrivers
   real(Real8_)          :: LastAuroraIonHeatTime
   real ::     tSimLastAuroraIonHeat, tSimNextAuroraIonHeat
   real ::     tSimCurrentAuroraIonHeat
-  real ::        FrozenTempUnit(1:nLons,1:nLats,1:nAlts,1:nBlocksMax)=0.0
-  real ::              FrozenCp(1:nLons,1:nLats,1:nAlts,1:nBlocksMax)=0.0
-  real ::             FrozenRho(1:nLons,1:nLats,1:nAlts,1:nBlocksMax)=0.0
 
   !EUV Variables
   real ::       PreviousEuvHeatingRate(1:nLons,1:nLats,1:nAlts,1:nBlocksMax)=0.0

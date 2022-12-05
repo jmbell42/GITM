@@ -190,9 +190,6 @@ subroutine calc_rates(iBlock)
 
   ! -------------------------------------------------------------------------------
 
-  TempUnit = MeanMajorMass / Boltzmanns_Constant       
-
-  ! -------------------------------------------------------------------------------
 
   !write(*,*) '==> calc_rates:  Before Mixing Ratio Calculation.'
 
@@ -208,8 +205,7 @@ subroutine calc_rates(iBlock)
      pco2(:,:,iAlt) = NDensityS(:,:,iAlt,iCO2_,iBlock)/mnd(:,:,iAlt)
 
      !   Temperature Based Arrays 
-     ttot(:,:,iAlt) = Temperature(:,:,iAlt,iBlock) * &
-          TempUnit(:,:,iAlt)   
+     ttot(:,:,iAlt) = Temperature(:,:,iAlt,iBlock) 
      tt(:,:,iAlt) = ttot(:,:,iAlt)**0.69
 
   enddo
@@ -286,17 +282,6 @@ subroutine calc_rates(iBlock)
 
      ! ---------------------------------------------------------------------------
      !
-     !    if (Is1D .and. UseKappa1DCorrection) then
-     !       KappaTemp(:,:,iAlt,iBlock) = KappaTemp0 * &
-     !            (Temperature(1:nLons,1:nLats,iAlt,iBlock) * &
-     !            TempUnit(1:nLons,1:nLats,iAlt) / &
-     !            Kappa1DCorrectionFactor)**Kappa1dCorrectionPower
-     !    else
-     !       KappaTemp(:,:,iAlt,iBlock) = KappaTemp0 * &
-     !           (Temperature(1:nLons,1:nLats,iAlt,iBlock) * &
-     !            TempUnit(1:nLons,1:nLats,iAlt))**0.75
-     !    endif
-
      KappaTemp(:,:,iAlt,iBlock) =  ktmix(1:nLons,1:nLats,iAlt) 
 
      ! ---------------------------------------------------------------------------
@@ -313,12 +298,6 @@ subroutine calc_rates(iBlock)
         enddo
      enddo
      ! ---------------------------------------------------------------------------
-
-     !   Earth GITM formulation for Molecular Viscosity (mks)
-     !    ViscCoef(:,:,iAlt) = 4.5e-5 * &
-     !         (Temperature(1:nLons,1:nLats,iAlt,iBlock)*&
-     !         TempUnit(1:nLons,1:nLats,iAlt)/ 1000.)**(-0.71)
-     !   MTGCM formulation for Molecular Viscosity requires cgs to mks conversion
 
      ViscCoef(:,:,iAlt) =  kmmix(1:nLons,1:nLats,iAlt)
 
@@ -358,8 +337,7 @@ subroutine calc_collisions(iBlock)
   ! Need to get the neutral, ion, and electron temperature
   !/
 
-  Tn = Temperature(1:nLons,1:nLats,1:nAlts,iBlock)*&
-       TempUnit(1:nLons,1:nLats,1:nAlts)
+  Tn = Temperature(1:nLons,1:nLats,1:nAlts,iBlock)
   Ti = ITemperature(1:nLons,1:nLats,1:nAlts,iBlock)
 
   mnd = NDensity(:,:,:,iBlock)+1.0
