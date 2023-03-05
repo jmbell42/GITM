@@ -683,6 +683,10 @@ subroutine set_inputs
 
            endif
 
+        case ("#AURORA")
+           call read_in_string(cAuroralModel, iError)
+
+           
         case ("#AURORAMODS")
            HasSetAuroraMods = .true.
            call read_in_logical(NormalizeAuroraToHP, iError)
