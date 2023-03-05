@@ -6,7 +6,8 @@ MPI_INC     = mpif90.h
 
 OSFLAGS     = -w -dusty
 
-OSDEBUG     = -C -gline
+OSDEBUG     = -g -traceback -check all, noarg_temp_created
+#OSDEBUG     = -C -gline
 #OSDEBUG     = 
 
 OFLAGMIN    = -O0
